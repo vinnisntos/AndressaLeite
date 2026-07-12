@@ -1,0 +1,54 @@
+@page
+@model AndressaLeite.Pages.Auth.CadastroModel
+@{
+    Layout = "/Pages/Shared/_Layout.cshtml";
+}
+
+<div class="my-auto">
+    <div class="mb-4 text-center">
+        <h2 class="fw-bold mb-1 fs-3">Criar Conta</h2>
+        <p class="text-muted fs-6">Cadastre seu e-mail e celular para agendar seus horários</p>
+    </div>
+
+    @if (!ModelState.IsValid)
+    {
+        <div class="alert alert-danger card-custom border-0 p-3 mb-4 fs-7" role="alert">
+            <div asp-validation-summary="All"></div>
+        </div>
+    }
+
+    <div class="card card-custom p-4 bg-white mb-4">
+        <form method="post">
+            <div class="mb-3">
+                <label class="form-label small fw-medium text-secondary">Nome Completo</label>
+                <input type="text" asp-for="FullName" class="form-control form-control-lg rounded-3 fs-6"
+                       placeholder="Seu nome completo" autocomplete="name" required />
+            </div>
+            <div class="mb-3">
+                <label class="form-label small fw-medium text-secondary">E-mail</label>
+                <input type="email" asp-for="Email" class="form-control form-control-lg rounded-3 fs-6"
+                       placeholder="seu-email@exemplo.com" autocomplete="email" required />
+            </div>
+            <div class="mb-3">
+                <label class="form-label small fw-medium text-secondary">Número do Celular</label>
+                <input type="tel" asp-for="Phone" class="form-control form-control-lg rounded-3 fs-6"
+                       placeholder="5515999999999" autocomplete="tel" required />
+                <div class="form-text small">Apenas dígitos, com DDI (ex.: 5511999998888).</div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label small fw-medium text-secondary">Senha</label>
+                <input type="password" asp-for="Password" class="form-control form-control-lg rounded-3 fs-6"
+                       placeholder="Mínimo 8 caracteres" autocomplete="new-password" required />
+                <div class="form-text small">Use pelo menos 8 caracteres, com letras e números.</div>
+            </div>
+            <div class="mb-4">
+                <label class="form-label small fw-medium text-secondary">Repita a Senha</label>
+                <input type="password" asp-for="ConfirmPassword" class="form-control form-control-lg rounded-3 fs-6"
+                       placeholder="Confirme sua senha" autocomplete="new-password" required />
+            </div>
+            <div class="d-grid">
+                <button type="submit" class="btn btn-brand py-3 rounded-3 font-medium fs-6">Concluir Cadastro</button>
+            </div>
+        </form>
+    </div>
+</div>

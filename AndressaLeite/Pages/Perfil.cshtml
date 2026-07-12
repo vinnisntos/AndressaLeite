@@ -1,0 +1,265 @@
+@page
+@model PerfilModel
+@{
+    Layout = "/Pages/Shared/_Layout.cshtml";
+    ViewData["Title"] = "Meu Perfil";
+}
+
+<div class="row justify-content-center mt-5">
+    <div class="col-12 col-md-8 col-lg-6">
+        <!-- Título -->
+        <div class="mb-4">
+            <h1 class="fw-bold tracking-tight fs-3 mb-2">Meu Perfil</h1>
+            <p class="text-muted">Visualize e atualize seus dados de perfil.</p>
+        </div>
+
+        <!-- Mensagens de Sucesso/Erro -->
+        @if (!string.IsNullOrEmpty(Model.SuccessMessage))
+        {
+            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                <i class="bi bi-check-circle me-2"></i>
+                @Model.SuccessMessage
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+        {
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="bi bi-exclamation-circle me-2"></i>
+                @Model.ErrorMessage
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        }
+
+        <!-- Card do Perfil -->
+        <div class="card card-custom p-4 shadow-sm">
+            <form method="post" asp-page-handler="">
+                <!-- Seção: Informações Read-Only -->
+                <fieldset class="mb-4 pb-4 border-bottom">
+                    <legend class="h6 fw-bold mb-3">Informações da Conta</legend>
+
+                    <!-- Email (Read-Only) -->
+                    <div class="mb-3">
+                        <label class="form-label text-muted small">E-mail</label>
+                        <input type="email" class="form-control" value="@Model.Email" disabled />
+                        <small class="text-muted d-block mt-1">O e-mail não pode ser alterado. Entre em contato com o suporte se necessário.</small>
+                    </div>
+
+                    <!-- Role (Read-Only) -->
+                    <div class="mb-3">
+                        <label class="form-label text-muted small">Tipo de Conta</label>
+                        <input type="text" class="form-control" value="@Model.FormatRole(Model.Role)" disabled />
+                        <small class="text-muted d-block mt-1">Sua permissão de acesso no sistema.</small>
+                    </div>
+                </fieldset>
+
+                <!-- Seção: Dados Editáveis -->
+                <fieldset class="mb-4">
+                    <legend class="h6 fw-bold mb-3">Dados Pessoais</legend>
+
+                    <!-- Nome Completo -->
+                    <div class="mb-3">
+                        <label asp-for="FullName" class="form-label fw-500">Nome Completo</label>
+                        <input asp-for="FullName" type="text" class="form-control form-control-lg" 
+                               placeholder="Seu nome completo" />
+                        <span asp-validation-for="FullName" class="text-danger small d-block mt-1"></span>
+                        <small class="text-muted d-block mt-1">Use apenas letras, espaços, hífen e apóstrofo.</small>
+                    </div>
+
+                    <!-- Telefone -->
+                    <div class="mb-3">
+                        <label asp-for="Phone" class="form-label fw-500">Telefone</label>
+                        <input asp-for="Phone" type="tel" class="form-control form-control-lg" 
+                               placeholder="+55 (11) 9 1234-5678" />
+                        <span asp-validation-for="Phone" class="text-danger small d-block mt-1"></span>
+                        <small class="text-muted d-block mt-1">Digite seu número com DDI e DDD (ex: +5511991234567).</small>
+                    </div>
+                </fieldset>
+
+                <!-- Seção: Alteração de Senha (Opcional) -->
+                <fieldset class="mb-4 pb-4 border-bottom">
+                    <legend class="h6 fw-bold mb-3">Alterar Senha</legend>
+
+                    <!-- Aviso em Vermelho -->
+                    <div class="alert alert-warning alert-dismissible fade show d-flex align-items-center mb-3" role="alert">
+                        <i class="bi bi-exclamation-triangle me-2" style="color: #dc2626;"></i>
+                        <div>
+                            <strong style="color: #dc2626;">Deixe em branco</strong> se não desejar alterar a senha.
+                        </div>
+                    </div>
+
+                    <!-- Mensagem de Sucesso/Erro de Senha -->
+                    @if (!string.IsNullOrEmpty(Model.PasswordChangeMessage))
+                    {
+                        if (Model.PasswordChangeMessage.StartsWith("✓"))
+                        {
+                            <div class="alert alert-success alert-dismissible fade show" role="alert">
+                                <i class="bi bi-check-circle me-2"></i>
+                                @Model.PasswordChangeMessage
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                                <i class="bi bi-exclamation-circle me-2"></i>
+                                @Model.PasswordChangeMessage
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>
+                        }
+                    }
+
+                    <!-- Senha Atual -->
+                    <div class="mb-3">
+                        <label asp-for="CurrentPassword" class="form-label fw-500">Senha Atual</label>
+                        <input asp-for="CurrentPassword" type="password" class="form-control form-control-lg" 
+                               placeholder="Digite sua senha atual" />
+                        <span asp-validation-for="CurrentPassword" class="text-danger small d-block mt-1"></span>
+                        <small class="text-muted d-block mt-1">Necessária para validar a alteração da senha.</small>
+                    </div>
+
+                    <!-- Nova Senha -->
+                    <div class="mb-3">
+                        <label asp-for="NewPassword" class="form-label fw-500">Nova Senha</label>
+                        <input asp-for="NewPassword" type="password" class="form-control form-control-lg" 
+                               placeholder="Digite a nova senha (mínimo 8 caracteres)" />
+                        <span asp-validation-for="NewPassword" class="text-danger small d-block mt-1"></span>
+                        <small class="text-muted d-block mt-1">Mínimo 8 caracteres, com letra e número.</small>
+                    </div>
+
+                    <!-- Confirmar Nova Senha -->
+                    <div class="mb-3">
+                        <label asp-for="ConfirmPassword" class="form-label fw-500">Confirmar Nova Senha</label>
+                        <input asp-for="ConfirmPassword" type="password" class="form-control form-control-lg" 
+                               placeholder="Confirme a nova senha" />
+                        <span asp-validation-for="ConfirmPassword" class="text-danger small d-block mt-1"></span>
+                    </div>
+                </fieldset>
+
+                <!-- Botões de Ação -->
+                <div class="d-grid gap-2 d-sm-flex gap-sm-2">
+                    <button type="submit" class="btn btn-brand py-3 px-4 fs-5 flex-grow-1 rounded-pill shadow-sm">
+                        <i class="bi bi-check-lg me-2"></i> Salvar Alterações
+                    </button>
+                    <a asp-page="/Index" class="btn btn-outline-secondary py-3 px-4 fs-5 flex-grow-1 rounded-pill">
+                        <i class="bi bi-x-lg me-2"></i> Cancelar
+                    </a>
+                </div>
+            </form>
+        </div>
+
+        <!-- Rodapé com Info Segurança -->
+        <div class="alert alert-info mt-4 py-3 px-4 small rounded-3">
+            <i class="bi bi-shield-check me-2"></i>
+            <strong>Segurança:</strong> Seus dados são criptografados e armazenados com segurança. 
+            Todas as alterações requerem sua confirmação.
+        </div>
+    </div>
+</div>
+
+<style>
+    .card-custom {
+        border: none;
+        border-radius: 16px;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.03);
+    }
+
+    .form-control, .form-control-lg {
+        border-radius: 8px;
+        border: 1px solid #e0e0e0;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .form-control:focus, .form-control-lg:focus {
+        border-color: #d4a373;
+        box-shadow: 0 0 0 0.25rem rgba(212, 163, 115, 0.15);
+    }
+
+    .form-label {
+        font-weight: 500;
+        color: #212529;
+        margin-bottom: 0.5rem;
+    }
+
+    .btn-brand {
+        background-color: #d4a373;
+        color: #ffffff;
+        border: none;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+
+    .btn-brand:hover, .btn-brand:focus {
+        background-color: #bfa07a;
+        color: #ffffff;
+        box-shadow: 0 4px 12px rgba(212, 163, 115, 0.2);
+    }
+
+    .btn-outline-secondary {
+        font-weight: 500;
+        border-width: 1.5px;
+    }
+
+    .btn-outline-secondary:hover {
+        background-color: #f8f9fa;
+        border-color: #bfa07a;
+        color: #bfa07a;
+    }
+
+    fieldset {
+        border: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    legend {
+        font-size: 0.95rem;
+        letter-spacing: 0.03em;
+        margin-bottom: 1.5rem;
+    }
+
+    .alert {
+        border: none;
+        border-radius: 12px;
+    }
+
+    .alert-success {
+        background-color: #f0f8f5;
+        border-left: 4px solid #28a745;
+        color: #1e5631;
+    }
+
+    .alert-danger {
+        background-color: #fdf7f7;
+        border-left: 4px solid #dc3545;
+        color: #721c24;
+    }
+
+    .alert-info {
+        background-color: #f0f7ff;
+        border-left: 4px solid #0d6efd;
+        color: #0c4f8c;
+    }
+</style>
+
+<style>
+    @@media (max-width: 576px) {
+        .d-sm-flex {
+            display: flex !important;
+            flex-direction: column;
+        }
+
+        .gap-sm-2 {
+            gap: 0.5rem !important;
+        }
+
+        .flex-grow-1 {
+            flex-grow: 1 !important;
+        }
+    }
+</style>
+
+@section Scripts {
+    @await Html.PartialAsync("_ValidationScriptsPartial")
+}

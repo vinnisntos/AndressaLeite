@@ -1,0 +1,87 @@
+﻿@page
+@model Pages.Admin.DashAdminModel
+@{
+    Layout = "/Pages/Shared/_Layout.cshtml";
+}
+
+<div class="mb-4">
+    <h3 class="fw-bold fs-4">Painel de Controle</h3>
+    <p class="text-muted small">Gestão Geral do Studio Bella (Andressa)</p>
+</div>
+
+<!-- Mensagens de Sucesso/Erro -->
+@if (!string.IsNullOrEmpty(Model.SuccessMessage))
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle me-2"></i>
+        @Model.SuccessMessage
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(Model.ErrorMessage))
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-circle me-2"></i>
+        @Model.ErrorMessage
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<!-- Grid de Indicadores Financeiros -->
+<div class="row g-3 mb-4">
+    <div class="col-12">
+        <div class="card card-custom p-3 bg-white border-start border-4 border-success">
+            <span class="text-muted small text-uppercase fw-semibold">Faturamento Real (Feito)</span>
+            <h3 class="fw-bold text-success mt-1 mb-0">R$ @Model.ActualRevenue</h3>
+        </div>
+    </div>  
+    <div class="col-12">
+        <div class="card card-custom p-3 bg-white border-start border-4 border-primary">
+            <span class="text-muted small text-uppercase fw-semibold">Lucro Estimado (Agenda)</span>
+            <h3 class="fw-bold text-primary mt-1 mb-0">R$ @Model.EstimatedRevenue</h3>
+        </div>
+    </div>
+</div>
+
+<!-- Controle de Equipe / Profissionais -->
+<div class="card card-custom p-4 bg-white mb-4">
+    <h5 class="fw-bold mb-3 fs-5">Cadastrar Profissional</h5>
+    <form method="post" asp-page-handler="AddEmployee">
+        <div class="mb-3">
+            <label class="form-label small text-secondary">Nome da Designer</label>
+            <input type="text" name="EmpName" class="form-control rounded-3" placeholder="Ex: Paula Designer" required />
+        </div>
+        <div class="mb-3">
+            <label class="form-label small text-secondary">E-mail de Acesso</label>
+            <input type="email" name="EmpEmail" class="form-control rounded-3" placeholder="email@exemplo.com" required />
+        </div>
+        <div class="mb-3">
+            <label class="form-label small text-secondary">Celular de Contato</label>
+            <input type="tel" name="EmpPhone" class="form-control rounded-3" placeholder="(15) 98888-8888" required />
+        </div>
+        <div class="mb-3">
+            <label class="form-label small text-secondary">Senha de Acesso</label>
+            <input type="password" name="EmpPassword" class="form-control rounded-3" placeholder="Senha do painel" required />
+        </div>
+        <button type="submit" class="btn btn-brand btn-sm w-100 py-2 rounded-3">Adicionar à Equipe</button>
+    </form>
+</div>
+
+<div class="card card-custom p-4 bg-white">
+    <h5 class="fw-bold mb-3 fs-5">Profissionais Ativas</h5>
+    <div class="list-group list-group-flush gap-2">
+        @foreach (var emp in Model.ActiveEmployees)
+        {
+            <div class="list-group-item d-flex justify-content-between align-items-center px-0 border-0">
+                <div>
+                    <h6 class="fw-bold mb-0 small">@emp.FullName</h6>
+                    <span class="text-muted style-custom" style="font-size: 0.75rem;">@emp.Phone</span>
+                </div>
+                <form method="post" asp-page-handler="RemoveEmployee" asp-route-id="@emp.Id">
+                    <button type="submit" class="btn btn-sm btn-link text-danger text-decoration-none small">Remover</button>
+                </form>
+            </div>
+        }
+    </div>
+</div>

@@ -1,0 +1,117 @@
+@using System.Security.Claims
+
+@{
+    // Partial view para navbar role-based
+    // Acesso aos claims do usuário autenticado
+    var userRole = User?.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+    var isAuthenticated = User?.Identity?.IsAuthenticated ?? false;
+}
+
+<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom sticky-top py-3">
+    <div class="container-fluid px-4">
+        <!-- Brand/Logo -->
+        <a class="navbar-brand fw-bold text-uppercase tracking-tight fs-6" asp-page="/Index">
+            Studio Bella
+        </a>
+
+        <!-- Toggle Button (Mobile) -->
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" 
+                aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <!-- Nav Items -->
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav ms-auto d-flex gap-3">
+                <!-- Home (sempre disponível) -->
+                <li class="nav-item">
+                    <a class="nav-link" asp-page="/Index">Home</a>
+                </li>
+
+                @if (isAuthenticated)
+                {
+                    <!-- Meu Perfil (apenas autenticado) -->
+                    <li class="nav-item">
+                        <a class="nav-link" asp-page="/Perfil">Meu Perfil</a>
+                    </li>
+
+                    <!-- Painel de Administrador (apenas admin) -->
+                    @if (userRole.Equals("admin", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <li class="nav-item">
+                            <a class="nav-link" asp-page="/Admin/DashAdmin">
+                                <i class="bi bi-speedometer2"></i> Painel Admin
+                            </a>
+                        </li>
+                    }
+
+                    <!-- Dashboard da Role (client/employee) -->
+                    @if (userRole.Equals("client", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <li class="nav-item">
+                            <a class="nav-link" asp-page="/Cliente/DashCliente">Meus Agendamentos</a>
+                        </li>
+                    }
+                    else if (userRole.Equals("employee", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <li class="nav-item">
+                            <a class="nav-link" asp-page="/Profissional/DashProfissional">Minha Agenda</a>
+                        </li>
+                    }
+
+                    <!-- Logout (apenas autenticado) -->
+                    <li class="nav-item">
+                        <a class="nav-link text-danger" asp-page="/Auth/Logout">Sair</a>
+                    </li>
+                }
+                else
+                {
+                    <!-- Login/Cadastro (não autenticado) -->
+                    <li class="nav-item">
+                        <a class="nav-link" asp-page="/Auth/Login">Entrar</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link btn btn-brand px-3 text-white rounded-pill" asp-page="/Auth/Cadastro">
+                            Cadastrar
+                        </a>
+                    </li>
+                }
+            </ul>
+        </div>
+    </div>
+</nav>
+
+<style>
+    .navbar {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+    }
+
+    .navbar-nav .nav-link {
+        font-weight: 500;
+        color: #212529 !important;
+        transition: color 0.2s ease;
+    }
+
+    .navbar-nav .nav-link:hover {
+        color: #d4a373 !important;
+    }
+
+    .navbar-brand {
+        letter-spacing: 0.05em;
+        color: #212529 !important;
+    }
+
+    .btn-brand {
+        background-color: #d4a373;
+        color: #ffffff;
+        border: none;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+
+    .btn-brand:hover, .btn-brand:focus {
+        background-color: #bfa07a;
+        color: #ffffff;
+        box-shadow: 0 4px 12px rgba(212, 163, 115, 0.2);
+    }
+</style>

@@ -1,0 +1,38 @@
+@page
+@model AndressaLeite.Pages.Profissional.DashProfissionalModel
+@{
+    Layout = "/Pages/Shared/_Layout.cshtml";
+}
+
+<div class="mb-4">
+    <h4 class="fw-bold mb-1 fs-4">Olá, @Model.EmployeeName!</h4>
+    <p class="text-muted fs-6">Sua agenda do dia</p>
+</div>
+
+@if (Model.AppointmentsToday.Count == 0)
+{
+    <div class="text-center py-4 text-muted bg-white rounded-4 card-custom">
+        <p class="small mb-0">Nenhum atendimento para hoje.</p>
+    </div>
+}
+else
+{
+    <div class="list-group gap-2">
+        @foreach (var appt in Model.AppointmentsToday)
+        {
+            <div class="list-group-item card-custom p-3 bg-white">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h6 class="fw-bold mb-1">@appt.StartTime.ToString("HH:mm") — @appt.ClientName</h6>
+                        <p class="text-muted small mb-0">@appt.ServiceName</p>
+                        @if (!string.IsNullOrEmpty(appt.BookedForName))
+                        {
+                            <span class="badge bg-light text-dark border mt-2">Para: @appt.BookedForName</span>
+                        }
+                    </div>
+                    <span class="badge bg-warning text-dark">@appt.Status</span>
+                </div>
+            </div>
+        }
+    </div>
+}
