@@ -1,9 +1,11 @@
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Supabase;
+using AndressaLeite.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,6 +18,12 @@ var supabaseOptions = new SupabaseOptions
     AutoConnectRealtime = true
 };
 builder.Services.AddScoped(provider => new Supabase.Client(supabaseUrl!, supabaseSecretKey!, supabaseOptions));
+
+// 1b. MULTI-TENANCY — resolução de salão por subdomínio (ver
+// Services/TenantResolutionMiddleware.cs e Services/CurrentTenant.cs).
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<CurrentTenant>();
+builder.Services.AddScoped<AppointmentBookingService>();
 
 // 2. SEGURANÇA E AUTENTICAÇÃO
 builder.Services
@@ -49,6 +57,13 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminOnly", policy => policy.RequireRole("admin"));
     options.AddPolicy("EmployeeOnly", policy => policy.RequireRole("employee"));
     options.AddPolicy("ClientOnly", policy => policy.RequireRole("client"));
+    // Admin é "profissional premium" (Fase 6 do roadmap, readme.txt): tem
+    // agenda própria além do painel de gestão. RequireRole já aceita
+    // múltiplas roles como OR — não precisa de lógica extra.
+    options.AddPolicy("EmployeeOrAdmin", policy => policy.RequireRole("employee", "admin"));
+    // Superadmin da plataforma MarcAi — cross-tenant, conta em
+    // platform_admins (não em profiles). Ver Models/PlatformAdmin.cs.
+    options.AddPolicy("SuperAdminOnly", policy => policy.RequireRole("superadmin"));
 });
 
 // 3. RATE LIMITING — defesa contra força bruta em login/cadastro e criação
@@ -87,17 +102,38 @@ builder.Services.AddRateLimiter(options =>
             AutoReplenishment = true
         });
     });
+
+    // Política "onboarding" — criar um salão novo é mais "caro" de abusar
+    // que um cadastro de cliente comum (spam de tenants, land-grab de
+    // slugs bons), então bem mais restrita: 3 por dia por IP.
+    options.AddPolicy("onboarding", httpContext =>
+    {
+        var ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 3,
+            Window = TimeSpan.FromDays(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        });
+    });
 });
 
 // 4. CONVENÇÕES DE ROTAS
 builder.Services.AddRazorPages(options =>
 {
     options.Conventions.AuthorizeFolder("/Admin", "AdminOnly");
-    options.Conventions.AuthorizeFolder("/Profissional", "EmployeeOnly");
+    options.Conventions.AuthorizeFolder("/Profissional", "EmployeeOrAdmin");
     options.Conventions.AuthorizeFolder("/Cliente", "ClientOnly");
+    options.Conventions.AuthorizeFolder("/SuperAdmin", "SuperAdminOnly");
 
     options.Conventions.AllowAnonymousToPage("/Index");
     options.Conventions.AllowAnonymousToFolder("/Auth");
+    options.Conventions.AllowAnonymousToFolder("/Onboarding");
+    // Login do superadmin precisa ser acessível sem estar autenticado —
+    // AllowAnonymousToPage tem prioridade sobre o AuthorizeFolder acima
+    // pra essa página específica (convenção padrão do Razor Pages).
+    options.Conventions.AllowAnonymousToPage("/SuperAdmin/Login");
 
     // Rate limit por página é aplicado direto nas page models (Login.cshtml.cs
     // e Cadastro.cshtml.cs) com [EnableRateLimiting("login"|"signup")].
@@ -151,6 +187,11 @@ app.Use(async (ctx, next) =>
     await next();
 });
 
+// Resolução de tenant (salão) pelo subdomínio. Cedo no pipeline — só
+// depende do Host da requisição, e todo o resto (auth, páginas) depende
+// do CurrentTenant já estar populado.
+app.UseMiddleware<TenantResolutionMiddleware>();
+
 app.UseStaticFiles();
 app.UseRouting();
 
@@ -158,6 +199,31 @@ app.UseRouting();
 app.UseRateLimiter();
 
 app.UseAuthentication();
+
+// Rede de segurança de isolamento multi-tenant: o cookie de auth já é
+// host-scoped por padrão (sem Cookie.Domain configurado, não é enviado
+// entre subdomínios diferentes), mas isso é só proteção de browser — uma
+// requisição HTTP arbitrária pode enviar um cookie válido de um tenant
+// com o Host de outro. Aqui comparamos a claim tenant_id gravada no login
+// contra o CurrentTenant resolvido pela URL atual; se divergir, a sessão
+// não é confiável para este subdomínio e é encerrada.
+app.Use(async (ctx, next) =>
+{
+    if (ctx.User.Identity?.IsAuthenticated == true)
+    {
+        var currentTenant = ctx.RequestServices.GetRequiredService<CurrentTenant>();
+        if (currentTenant.IsResolved &&
+            AuthorizationService.TryGetTenantId(ctx.User, out var claimTenantId) &&
+            !string.Equals(claimTenantId, currentTenant.Id, StringComparison.Ordinal))
+        {
+            await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            ctx.Response.Redirect("/Auth/Login");
+            return;
+        }
+    }
+    await next();
+});
+
 app.UseAuthorization();
 
 app.MapRazorPages();
