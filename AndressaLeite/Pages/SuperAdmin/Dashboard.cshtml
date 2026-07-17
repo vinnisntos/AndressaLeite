@@ -1,0 +1,62 @@
+@page
+@model AndressaLeite.Pages.SuperAdmin.DashboardModel
+@{
+    Layout = "/Pages/Shared/_Layout.cshtml";
+}
+
+<div class="mb-4 d-flex justify-content-between align-items-start">
+    <div>
+        <h3 class="fw-bold fs-4">Painel MarcAi</h3>
+        <p class="text-muted small">Salões cadastrados na plataforma</p>
+    </div>
+    <a asp-page="/SuperAdmin/Security" class="btn btn-sm btn-outline-secondary rounded-3">
+        <i class="bi bi-shield-lock"></i> Segurança
+    </a>
+</div>
+
+@if (!string.IsNullOrEmpty(Model.SuccessMessage))
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        @Model.SuccessMessage
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+@if (!string.IsNullOrEmpty(Model.ErrorMessage))
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        @Model.ErrorMessage
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<div class="card card-custom p-4 bg-white">
+    @if (Model.Tenants.Count == 0)
+    {
+        <p class="text-muted small mb-0">Nenhum salão cadastrado ainda.</p>
+    }
+    else
+    {
+        <div class="list-group gap-2">
+            @foreach (var tenant in Model.Tenants)
+            {
+                <div class="list-group-item d-flex justify-content-between align-items-center px-0 border-0">
+                    <div>
+                        <h6 class="fw-bold mb-0 small">
+                            @tenant.Name
+                            @if (!tenant.IsActive)
+                            {
+                                <span class="badge bg-secondary ms-1">Suspenso</span>
+                            }
+                        </h6>
+                        <span class="text-muted" style="font-size: 0.75rem;">@tenant.Slug</span>
+                    </div>
+                    <form method="post" asp-page-handler="ToggleTenant" asp-route-id="@tenant.Id">
+                        <button type="submit" class="btn btn-sm @(tenant.IsActive ? "btn-outline-danger" : "btn-outline-success") rounded-3">
+                            @(tenant.IsActive ? "Desativar" : "Reativar")
+                        </button>
+                    </form>
+                </div>
+            }
+        </div>
+    }
+</div>

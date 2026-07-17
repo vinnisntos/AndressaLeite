@@ -11,6 +11,14 @@ namespace AndressaLeite.Services
     public static class AuthorizationService
     {
         /// <summary>
+        /// Nome da claim customizada que grava o tenant (salão) do usuário
+        /// no cookie de autenticação. Gravada no login/cadastro, lida pelo
+        /// middleware de segurança que compara com o CurrentTenant
+        /// resolvido pelo subdomínio da requisição (ver Program.cs).
+        /// </summary>
+        public const string TenantClaimType = "tenant_id";
+
+        /// <summary>
         /// Mapeamento centralizado: dado uma role conhecida, retorna a página
         /// padrão pós-login. Roles desconhecidas caem em "/" (Index).
         /// </summary>
@@ -57,6 +65,20 @@ namespace AndressaLeite.Services
         /// </summary>
         public static string GetRole(ClaimsPrincipal? user)
             => user?.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+
+        /// <summary>
+        /// Extrai o id do tenant (claim TenantClaimType) de forma segura.
+        /// Retorna false se não houver a claim.
+        /// </summary>
+        public static bool TryGetTenantId(ClaimsPrincipal? user, out string tenantId)
+        {
+            tenantId = string.Empty;
+            if (user is null) return false;
+            var raw = user.FindFirstValue(TenantClaimType);
+            if (string.IsNullOrWhiteSpace(raw)) return false;
+            tenantId = raw;
+            return true;
+        }
 
         /// <summary>
         /// Roles conhecidas do sistema. Útil para validações de input em

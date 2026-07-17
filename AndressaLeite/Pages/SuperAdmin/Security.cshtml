@@ -1,0 +1,94 @@
+@page
+@model AndressaLeite.Pages.SuperAdmin.SecurityModel
+@{
+    Layout = "/Pages/Shared/_Layout.cshtml";
+}
+
+<div class="mb-4">
+    <h3 class="fw-bold fs-4">Segurança da Conta</h3>
+    <p class="text-muted small">Painel MarcAi &mdash; sua conta de superadmin</p>
+</div>
+
+@if (!string.IsNullOrEmpty(Model.SuccessMessage))
+{
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        @Model.SuccessMessage
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+@if (!string.IsNullOrEmpty(Model.ErrorMessage))
+{
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        @Model.ErrorMessage
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+}
+
+<!-- Troca de senha -->
+<div class="card card-custom p-4 bg-white mb-4">
+    <h5 class="fw-bold mb-3 fs-5">Trocar Senha</h5>
+    <form method="post" asp-page-handler="ChangePassword">
+        <div class="mb-2">
+            <label class="form-label small text-secondary">Senha atual</label>
+            <input type="password" name="CurrentPassword" class="form-control rounded-3" autocomplete="current-password" required />
+        </div>
+        <div class="mb-2">
+            <label class="form-label small text-secondary">Nova senha</label>
+            <input type="password" name="NewPassword" class="form-control rounded-3" autocomplete="new-password" required />
+            <div class="form-text small">Mínimo 8 caracteres, com letra e número.</div>
+        </div>
+        <div class="mb-3">
+            <label class="form-label small text-secondary">Confirme a nova senha</label>
+            <input type="password" name="ConfirmPassword" class="form-control rounded-3" autocomplete="new-password" required />
+        </div>
+        <button type="submit" class="btn btn-brand btn-sm rounded-3">Trocar Senha</button>
+    </form>
+</div>
+
+<!-- 2FA -->
+<div class="card card-custom p-4 bg-white mb-4">
+    <h5 class="fw-bold mb-3 fs-5">Autenticação em Duas Etapas (2FA)</h5>
+
+    @if (Model.TotpEnabled)
+    {
+        <p class="text-success small fw-semibold mb-3">✓ 2FA ativo — login exige código do app autenticador.</p>
+        <form method="post" asp-page-handler="DisableTotp" onsubmit="return confirm('Tem certeza? Isso reduz a segurança da conta.');">
+            <div class="mb-2">
+                <label class="form-label small text-secondary">Confirme sua senha pra desativar</label>
+                <input type="password" name="CurrentPasswordForDisable" class="form-control rounded-3" autocomplete="current-password" required />
+            </div>
+            <button type="submit" class="btn btn-outline-danger btn-sm rounded-3">Desativar 2FA</button>
+        </form>
+    }
+    else if (Model.TotpPending)
+    {
+        <p class="text-muted small mb-3">
+            Escaneie o QR abaixo com Google Authenticator, Authy ou similar, e digite o código gerado pra confirmar.
+        </p>
+        <div class="text-center mb-3">
+            <img src="@Model.QrCodeDataUri" alt="QR code do 2FA" style="max-width: 220px;" class="border rounded-3 p-2" />
+        </div>
+        <p class="text-muted small mb-3">
+            Não consegue escanear? Digite manualmente: <code>@Model.ManualEntryKey</code>
+        </p>
+        <form method="post" asp-page-handler="ConfirmTotp" class="mb-2">
+            <div class="mb-2">
+                <label class="form-label small text-secondary">Código de 6 dígitos</label>
+                <input type="text" name="TotpCode" class="form-control rounded-3 text-center" inputmode="numeric" pattern="[0-9]*" maxlength="6" required />
+            </div>
+            <button type="submit" class="btn btn-brand btn-sm rounded-3">Confirmar e Ativar</button>
+        </form>
+        <form method="post" asp-page-handler="GenerateTotp">
+            <button type="submit" class="btn btn-sm btn-link text-muted text-decoration-none px-0">Gerar um novo QR</button>
+        </form>
+    }
+    else
+    {
+        <p class="text-muted small mb-3">2FA desativado. Recomendado pra essa conta — é a mais poderosa do sistema.</p>
+        <form method="post" asp-page-handler="GenerateTotp">
+            <button type="submit" class="btn btn-brand btn-sm rounded-3">Ativar 2FA</button>
+        </form>
+    }
+</div>
+
+<a asp-page="/SuperAdmin/Dashboard" class="text-decoration-none text-secondary small">&larr; Voltar ao painel</a>
