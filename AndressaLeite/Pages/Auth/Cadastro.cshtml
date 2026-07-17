@@ -10,6 +10,15 @@
         <p class="text-muted fs-6">Cadastre seu e-mail e celular para agendar seus horários</p>
     </div>
 
+    <!-- Exibe falhas de infraestrutura, conexão ou erros retornados pelo PostgreSQL -->
+    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-danger card-custom border-0 p-3 mb-4 fs-7" role="alert">
+            <strong>Não foi possível cadastrar:</strong> @Model.ErrorMessage
+        </div>
+    }
+
+    <!-- Exibe validações locais dos inputs (senhas divergentes, formatos inválidos) -->
     @if (!ModelState.IsValid)
     {
         <div class="alert alert-danger card-custom border-0 p-3 mb-4 fs-7" role="alert">

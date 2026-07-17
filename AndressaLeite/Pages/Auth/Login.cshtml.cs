@@ -6,13 +6,22 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.RateLimiting;
 using AndressaLeite.Services;
-using Supabase.Gotrue;
+using BCrypt.Net;
 
 namespace AndressaLeite.Pages.Auth
 {
     [EnableRateLimiting("login")]
     public class LoginModel : PageModel
     {
+        private readonly ILogger<LoginModel> _logger;
+        private readonly CurrentTenant _currentTenant;
+
+        public LoginModel(ILogger<LoginModel> logger, CurrentTenant currentTenant)
+        {
+            _logger = logger;
+            _currentTenant = currentTenant;
+        }
+
         [BindProperty]
         [Required(ErrorMessage = "O e-mail é obrigatório.")]
         [EmailAddress(ErrorMessage = "Informe um e-mail válido.")]
@@ -23,16 +32,21 @@ namespace AndressaLeite.Pages.Auth
         [DataType(DataType.Password)]
         public string Password { get; set; } = string.Empty;
 
-        /// <summary>
-        /// URL para onde voltar após o login (vinda de query string).
-        /// Validada em IsLocalSafeUrl para evitar open-redirect.
-        /// </summary>
         [BindProperty(SupportsGet = true)]
         public string? ReturnUrl { get; set; }
 
+        public string? ErrorMessage { get; set; }
+
         public IActionResult OnGet()
         {
-            // Se já estiver autenticado, manda para o destino apropriado.
+            // Login só faz sentido dentro do subdomínio de um salão. Sem
+            // tenant resolvido (domínio raiz) ou com o salão suspenso, a
+            // Index é quem decide a mensagem certa a mostrar.
+            if (!_currentTenant.IsResolved || !_currentTenant.IsActive)
+            {
+                return RedirectToPage("/Index");
+            }
+
             if (User.Identity?.IsAuthenticated == true)
             {
                 return SafeRedirect(AuthorizationService.GetDefaultLandingForRole(AuthorizationService.GetRole(User)));
@@ -42,68 +56,69 @@ namespace AndressaLeite.Pages.Auth
 
         public async Task<IActionResult> OnPostAsync([FromServices] Supabase.Client supabase)
         {
+            if (!_currentTenant.IsResolved || !_currentTenant.IsActive)
+            {
+                return RedirectToPage("/Index");
+            }
+
             if (!ModelState.IsValid) return Page();
 
-            // Supabase pode ser configurado de duas formas; usamos email/senha.
-            Supabase.Gotrue.Session? session;
+            AndressaLeite.Models.Profile? profile = null;
+
             try
             {
-                session = await supabase.Auth.SignIn(Email, Password);
-            }
-            catch (Exception ex) when (LooksLikeInvalidCredentials(ex))
-            {
-                // Credenciais inválidas — mensagem genérica, sem vazar qual campo falhou.
-                ModelState.AddModelError(string.Empty, "E-mail ou senha inválidos.");
-                return Page();
-            }
-            catch (Exception)
-            {
-                // Erro inesperado — não ecoar a mensagem interna (pode expor
-                // schema, URLs internas, etc.). Logar via ILogger idealmente.
-                ModelState.AddModelError(string.Empty, "Não foi possível processar o login. Tente novamente em instantes.");
-                return Page();
-            }
+                // 🔴 RESOLVIDO: Trata a string fora da expressão LINQ do Supabase
+                string targetEmail = Email.Trim().ToLowerInvariant();
 
-            if (session?.User is null)
-            {
-                ModelState.AddModelError(string.Empty, "E-mail ou senha inválidos.");
-                return Page();
-            }
-
-            // Lê o perfil para conhecer a role. Em paralelo, o JWT já traz
-            // user_metadata.role (gravado no signup). Usamos os dois e exigimos
-            // que batam — assim um atacante que edite o Profile no banco
-            // (RLS está desativado) não consegue escalar privilégio.
-            string? profileRole = null;
-            try
-            {
-                var profile = await supabase.From<Models.Profile>()
-                    .Where(x => x.Id == session.User.Id)
+                // 1. Busca o usuário diretamente na sua tabela pública pelo e-mail
+                // tratado, restrito ao salão do subdomínio atual (mesmo e-mail
+                // pode existir em salões diferentes como contas separadas).
+                // Filtro de tenant SEMPRE como .Where() encadeado separado —
+                // não fundir com o filtro de e-mail num só lambda (driver
+                // postgrest-csharp tem bug documentado com certas combinações,
+                // ver comentários em DashProfissional.cshtml.cs).
+                profile = await supabase.From<Models.Profile>()
+                    .Where(x => x.Email == targetEmail)
+                    .Where(x => x.TenantId == _currentTenant.Id)
                     .Single();
-                profileRole = profile?.Role;
             }
-            catch
+            catch (Exception ex)
             {
-                // Se o profile não existe ainda, segue só com a role do JWT.
+                string msg = ex.Message.ToLower();
+                if (!msg.Contains("sequence contains no elements") && !msg.Contains("404") && !msg.Contains("null"))
+                {
+                    // Loga o detalhe internamente; a UI recebe só uma mensagem genérica
+                    // para não expor schema/infra do banco a um usuário não autenticado.
+                    _logger.LogError(ex, "Falha de infraestrutura ao buscar perfil no login para {Email}", Email);
+                    ErrorMessage = "Não foi possível concluir o login no momento. Tente novamente em instantes.";
+                    return Page();
+                }
             }
 
-            var jwtRole = session.User.UserMetadata?["role"] as string;
-            var role = (profileRole ?? jwtRole ?? string.Empty).ToLowerInvariant();
+            // 2. Valida se o usuário existe e se o hash da senha bate com o BCrypt
+            if (profile is null || string.IsNullOrEmpty(profile.PasswordHash) ||
+                !BCrypt.Net.BCrypt.Verify(Password, profile.PasswordHash))
+            {
+                ModelState.AddModelError(string.Empty, "E-mail ou senha inválidos.");
+                return Page();
+            }
+
+            // 3. Valida se a Role vinda da tabela é permitida
+            var role = (profile.Role ?? string.Empty).ToLowerInvariant();
 
             if (string.IsNullOrEmpty(role) || !AuthorizationService.KnownRoles.Contains(role) || role == "inactive")
             {
-                // Sem role válida: rejeita o login.
                 ModelState.AddModelError(string.Empty, "Conta sem permissão de acesso. Contate o suporte.");
                 return Page();
             }
 
-            // Se profile e JWT discordam, preferimos o JWT (assinado, não
-            // editável pelo usuário). Logar a divergência é recomendado em produção.
+            // 4. Cria os Claims do Cookie baseados nos dados da tabela pública
             var claims = new List<Claim>
             {
-                new Claim(ClaimTypes.NameIdentifier, session.User.Id),
-                new Claim(ClaimTypes.Email, Email),
-                new Claim(ClaimTypes.Role, role)
+                new Claim(ClaimTypes.NameIdentifier, profile.Id),
+                new Claim(ClaimTypes.Email, profile.Email ?? Email),
+                new Claim(ClaimTypes.Role, role),
+                new Claim(AuthorizationService.TenantClaimType, profile.TenantId)
             };
 
             var claimsIdentity = new ClaimsIdentity(
@@ -123,47 +138,19 @@ namespace AndressaLeite.Pages.Auth
                 }
             );
 
-            // Decide destino: ReturnUrl (se seguro) > landing da role.
             if (AuthorizationService.IsLocalSafeUrl(ReturnUrl))
             {
                 return LocalRedirect(ReturnUrl!);
             }
+
             return SafeRedirect(AuthorizationService.GetDefaultLandingForRole(role));
         }
 
         private IActionResult SafeRedirect(string path)
         {
-            // Helper para garantir que o caminho é local antes de redirecionar.
             return AuthorizationService.IsLocalSafeUrl(path)
                 ? LocalRedirect(path)
                 : RedirectToPage("/Index");
-        }
-
-        /// <summary>
-        /// Identifica, de forma defensiva, se a exceção do Supabase Gotrue
-        /// representa credenciais inválidas. Como o tipo da exceção varia entre
-        /// versões da lib (GotrueException, WeakPasswordException, etc.),
-        /// inspecionamos por nome de tipo e por mensagem.
-        /// </summary>
-        private static bool LooksLikeInvalidCredentials(Exception ex)
-        {
-            var typeName = ex.GetType().Name;
-            if (typeName.Contains("InvalidCredentials", StringComparison.OrdinalIgnoreCase) ||
-                typeName.Contains("InvalidLogin", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-            // Algumas versões expõem StatusCode via reflection
-            var statusProp = ex.GetType().GetProperty("StatusCode");
-            if (statusProp?.GetValue(ex) is int code && (code == 400 || code == 401 || code == 422))
-            {
-                return true;
-            }
-            // Fallback: checa a mensagem (palavras-chave comuns do Supabase)
-            var msg = ex.Message ?? string.Empty;
-            return msg.Contains("Invalid login", StringComparison.OrdinalIgnoreCase) ||
-                   msg.Contains("Invalid credentials", StringComparison.OrdinalIgnoreCase) ||
-                   msg.Contains("Invalid email or password", StringComparison.OrdinalIgnoreCase);
         }
     }
 }

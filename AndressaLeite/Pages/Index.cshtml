@@ -1,19 +1,52 @@
-﻿@page
+@page
 @model IndexModel
 @{
     Layout = "/Pages/Shared/_Layout.cshtml";
 }
 
-<div class="text-center my-auto py-5">
-    <div class="mb-4">
-        <div class="bg-white d-inline-block p-4 rounded-circle shadow-sm card-custom">
-            <span class="fs-1">✨</span>
+@if (Model.ViewState == "platform")
+{
+    <div class="text-center my-auto py-5">
+        <div class="mb-4">
+            <div class="bg-white d-inline-block p-4 rounded-circle shadow-sm card-custom">
+                <span class="fs-1">✨</span>
+            </div>
+        </div>
+        <h1 class="fw-bold tracking-tight mb-2 fs-2">Agendamentos online para o seu salão</h1>
+        <p class="text-muted mb-5 px-3">Crie o painel do seu salão em poucos minutos: agenda, equipe e serviços, tudo num só lugar.</p>
+
+        <div class="d-grid gap-3">
+            <a asp-page="/Onboarding/CriarSalao" class="btn btn-brand py-3 fs-5 rounded-pill shadow-sm">Criar meu salão</a>
         </div>
     </div>
-    <h1 class="fw-bold tracking-tight mb-2 fs-2">Olhar Renovado, Autoestima Elevada</h1>
-    <p class="text-muted mb-5 px-3">Agende seu design de sobrancelhas personalizado com as melhores profissionais em poucos cliques.</p>
-
-    <div class="d-grid gap-3">
-        <a asp-page="/Auth/Login" class="btn btn-brand py-3 fs-5 rounded-pill shadow-sm">Começar Agendamento</a>
+}
+else if (Model.ViewState == "not_found")
+{
+    <div class="text-center my-auto py-5">
+        <h1 class="fw-bold tracking-tight mb-2 fs-2">Salão não encontrado</h1>
+        <p class="text-muted mb-5 px-3">Não encontramos nenhum salão neste endereço. Confira se o link está certo.</p>
     </div>
-</div>
+}
+else if (Model.ViewState == "suspended")
+{
+    <div class="text-center my-auto py-5">
+        <h1 class="fw-bold tracking-tight mb-2 fs-2">Conta suspensa</h1>
+        <p class="text-muted mb-5 px-3">O painel deste salão está temporariamente desativado. Entre em contato com o suporte.</p>
+    </div>
+}
+else
+{
+    <div class="text-center my-auto py-5">
+        <div class="mb-4">
+            <div class="bg-white d-inline-block p-4 rounded-circle shadow-sm card-custom">
+                <span class="fs-1">✨</span>
+            </div>
+        </div>
+        <h1 class="fw-bold tracking-tight mb-2 fs-2">Olhar Renovado, Autoestima Elevada</h1>
+        <p class="text-muted mb-5 px-3">Agende seu horário com @CurrentTenant.Name em poucos cliques.</p>
+
+        <div class="d-grid gap-3">
+            <a asp-page="/Auth/Login" class="btn btn-brand py-3 fs-5 rounded-pill shadow-sm">Começar Agendamento</a>
+        </div>
+    </div>
+}

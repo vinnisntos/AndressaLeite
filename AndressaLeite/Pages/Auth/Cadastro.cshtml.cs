@@ -2,21 +2,32 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using System.ComponentModel.DataAnnotations;
 using System.Text.RegularExpressions;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.RateLimiting;
 using Supabase.Gotrue;
+using BCrypt.Net;
+using AndressaLeite.Services;
 
 namespace AndressaLeite.Pages.Auth
 {
     [EnableRateLimiting("signup")]
     public class CadastroModel : PageModel
     {
+        private readonly ILogger<CadastroModel> _logger;
+        private readonly CurrentTenant _currentTenant;
+
+        public CadastroModel(ILogger<CadastroModel> logger, CurrentTenant currentTenant)
+        {
+            _logger = logger;
+            _currentTenant = currentTenant;
+        }
+
         [BindProperty]
         [Required(ErrorMessage = "Nome é obrigatório.")]
         [StringLength(120, MinimumLength = 2, ErrorMessage = "O nome deve ter entre 2 e 120 caracteres.")]
-        [RegularExpression(@"^[\p{L}\p{M}'\.\- ]+$",
-            ErrorMessage = "O nome contém caracteres inválidos.")]
+        [RegularExpression(@"^[\p{L}\p{M}'\.\- ]+$", ErrorMessage = "O nome contém caracteres inválidos.")]
         public string FullName { get; set; } = string.Empty;
 
         [BindProperty]
@@ -26,8 +37,7 @@ namespace AndressaLeite.Pages.Auth
 
         [BindProperty]
         [Required(ErrorMessage = "Celular é obrigatório.")]
-        [RegularExpression(@"^\+?[1-9]\d{10,14}$",
-            ErrorMessage = "Telefone inválido. Use DDI + DDD + número (somente dígitos).")]
+        [RegularExpression(@"^\+?[1-9]\d{10,14}$", ErrorMessage = "Telefone inválido. Use DDI + DDD + número (somente dígitos).")]
         public string Phone { get; set; } = string.Empty;
 
         [BindProperty]
@@ -43,10 +53,18 @@ namespace AndressaLeite.Pages.Auth
         public string ConfirmPassword { get; set; } = string.Empty;
 
         [TempData] public string? InfoMessage { get; set; }
-        [TempData] public string? ErrorMessage { get; set; }
+        public string? ErrorMessage { get; set; }
 
         public IActionResult OnGet()
         {
+            // Cadastro de cliente só faz sentido dentro do subdomínio de um
+            // salão. Sem tenant resolvido ou com o salão suspenso, a Index
+            // é quem decide a mensagem certa a mostrar.
+            if (!_currentTenant.IsResolved || !_currentTenant.IsActive)
+            {
+                return RedirectToPage("/Index");
+            }
+
             if (User.Identity?.IsAuthenticated == true)
             {
                 return RedirectToPage("/Index");
@@ -56,80 +74,59 @@ namespace AndressaLeite.Pages.Auth
 
         public async Task<IActionResult> OnPostAsync([FromServices] Supabase.Client supabase)
         {
+            if (!_currentTenant.IsResolved || !_currentTenant.IsActive)
+            {
+                return RedirectToPage("/Index");
+            }
+
             if (!ModelState.IsValid) return Page();
 
-            // Validação extra de complexidade: pelo menos 1 letra e 1 número.
-            // (Não exigimos caractere especial — alinhado com NIST SP 800-63B.)
+            // Validação de complexidade (Alinhado com NIST SP 800-63B)
             if (!Regex.IsMatch(Password, @"[A-Za-z]") || !Regex.IsMatch(Password, @"\d"))
             {
-                ModelState.AddModelError(nameof(Password),
-                    "A senha deve conter pelo menos uma letra e um número.");
+                ModelState.AddModelError(nameof(Password), "A senha deve conter pelo menos uma letra e um número.");
                 return Page();
             }
 
-            // Normaliza telefone mantendo só dígitos (já validado pelo regex
-            // do ModelState, então é seguro descartar tudo que não for dígito).
             var cleanPhone = Regex.Replace(Phone, @"[^\d]", "");
 
-            var metadata = new Dictionary<string, object>
-            {
-                { "full_name", FullName },
-                { "phone", cleanPhone },
-                { "role", "client" }
-            };
+            // 1. Criptografia no C# via BCrypt
+            string hashedPassword = BCrypt.Net.BCrypt.HashPassword(Password);
 
-            var options = new SignUpOptions { Data = metadata };
+            // 2. Cria um novo ID único para o usuário
+            string newUserId = Guid.NewGuid().ToString();
+
+            var profile = new AndressaLeite.Models.Profile
+            {
+                Id = newUserId,
+                FullName = FullName.Trim(),
+                Phone = cleanPhone,
+                Role = "client",
+                Email = Email.Trim().ToLowerInvariant(),
+                PasswordHash = hashedPassword,
+                TenantId = _currentTenant.Id!
+            };
 
             try
             {
-                var session = await supabase.Auth.SignUp(Email, Password, options);
+                // 3. Executa o insert na tabela pública
+                await supabase.From<AndressaLeite.Models.Profile>().Insert(profile);
 
-                if (session?.User is null)
+                // 4. Cria a identidade de Cookies local do .NET
+                var claims = new List<Claim>
                 {
-                    ErrorMessage = "Não foi possível concluir o cadastro. E-mail pode já estar cadastrado.";
-                    return Page();
-                }
-
-                // Valida se o Id foi corretamente gerado
-                if (string.IsNullOrWhiteSpace(session.User.Id))
-                {
-                    ErrorMessage = "Erro ao criar conta. Tente novamente.";
-                    return Page();
-                }
-
-                // Cria o perfil do cliente no banco
-                var profile = new AndressaLeite.Models.Profile
-                {
-                    Id = session.User.Id,
-                    FullName = FullName.Trim(),
-                    Phone = cleanPhone,
-                    Role = "client"
+                    new Claim(ClaimTypes.NameIdentifier, newUserId),
+                    new Claim(ClaimTypes.Email, Email.Trim().ToLowerInvariant()),
+                    new Claim(ClaimTypes.Role, "client"),
+                    new Claim(AuthorizationService.TenantClaimType, _currentTenant.Id!)
                 };
 
-                try
-                {
-                    await supabase.From<AndressaLeite.Models.Profile>().Insert(profile);
-                }
-                catch
-                {
-                    // Se falhar ao criar profile, continua mesmo assim
-                }
-
-                // Auto-login após cadastro (sem exigir email confirmado)
-                var claims = new System.Security.Claims.ClaimsIdentity(
-                    new[]
-                    {
-                        new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, session.User.Id),
-                        new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Email, Email),
-                        new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, "client")
-                    },
-                    CookieAuthenticationDefaults.AuthenticationScheme
-                );
+                var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
 
                 await HttpContext.SignInAsync(
                     CookieAuthenticationDefaults.AuthenticationScheme,
-                    new System.Security.Claims.ClaimsPrincipal(claims),
-                    new Microsoft.AspNetCore.Authentication.AuthenticationProperties
+                    new ClaimsPrincipal(claimsIdentity),
+                    new AuthenticationProperties
                     {
                         IsPersistent = true,
                         ExpiresUtc = DateTimeOffset.UtcNow.AddDays(7)
@@ -138,16 +135,15 @@ namespace AndressaLeite.Pages.Auth
 
                 return RedirectToPage("/Cliente/DashCliente");
             }
-            catch (Supabase.Gotrue.Exceptions.GotrueException gex) when (gex.StatusCode == 422)
+            catch (Exception ex)
             {
-                // 422: e-mail já cadastrado, ou senha fraca do lado Supabase.
-                // Mensagem genérica para não confirmar/negaciar a existência do e-mail.
-                ErrorMessage = "Não foi possível concluir o cadastro. Verifique os dados e tente novamente.";
-                return Page();
-            }
-            catch (Exception)
-            {
-                ErrorMessage = "Não foi possível concluir o cadastro. Tente novamente em instantes.";
+                // Loga o detalhe internamente; a UI recebe só uma mensagem genérica
+                // para não expor schema/infra do banco a um usuário não autenticado.
+                var isDuplicate = (ex.InnerException?.Message ?? ex.Message).Contains("23505");
+                _logger.LogError(ex, "Falha ao inserir profile no cadastro para {Email}", Email);
+                ErrorMessage = isDuplicate
+                    ? "Este e-mail já está cadastrado."
+                    : "Não foi possível concluir o cadastro no momento. Tente novamente em instantes.";
                 return Page();
             }
         }

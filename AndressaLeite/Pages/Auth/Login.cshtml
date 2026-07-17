@@ -10,14 +10,27 @@
         <p class="text-muted fs-6">Acesse sua conta para gerenciar seus horários</p>
     </div>
 
+    <!-- Mensagens informativas globais -->
     @if (TempData["InfoMessage"] is string info && !string.IsNullOrEmpty(info))
     {
         <div class="alert alert-info card-custom border-0 p-3 mb-4 fs-7" role="alert">@info</div>
     }
+
+    <!-- Mensagens de erros vindas do TempData -->
     @if (TempData["ErrorMessage"] is string err && !string.IsNullOrEmpty(err))
     {
         <div class="alert alert-danger card-custom border-0 p-3 mb-4 fs-7" role="alert">@err</div>
     }
+
+    <!-- 🔴 ADICIONADO: Exibe erros críticos de banco de dados capturados no OnPostAsync -->
+    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-danger card-custom border-0 p-3 mb-4 fs-7" role="alert">
+            <strong>Falha técnica no Login:</strong> @Model.ErrorMessage
+        </div>
+    }
+
+    <!-- Mensagens de validação local (ex: formato de e-mail inválido ou credenciais incorretas) -->
     @if (!ModelState.IsValid)
     {
         <div class="alert alert-danger card-custom border-0 p-3 mb-4 fs-7" role="alert">

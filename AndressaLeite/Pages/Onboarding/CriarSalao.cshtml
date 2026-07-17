@@ -1,0 +1,76 @@
+@page
+@model AndressaLeite.Pages.Onboarding.CriarSalaoModel
+@{
+    Layout = "/Pages/Shared/_Layout.cshtml";
+}
+
+<div class="my-auto">
+    <div class="mb-4 text-center">
+        <h2 class="fw-bold mb-1 fs-3">Crie o painel do seu salão</h2>
+        <p class="text-muted fs-6">Agendamentos online para o seu salão em poucos minutos.</p>
+    </div>
+
+    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-danger card-custom border-0 p-3 mb-4 fs-7" role="alert">@Model.ErrorMessage</div>
+    }
+
+    @if (!ModelState.IsValid)
+    {
+        <div class="alert alert-danger card-custom border-0 p-3 mb-4 fs-7" role="alert">
+            <div asp-validation-summary="All"></div>
+        </div>
+    }
+
+    <div class="card card-custom p-4 bg-white mb-4">
+        <form method="post">
+            <div class="mb-3">
+                <label class="form-label small fw-medium text-secondary">Endereço do salão</label>
+                <div class="input-group">
+                    <input type="text" asp-for="SalonSlug" class="form-control form-control-lg rounded-start-3 fs-6"
+                           placeholder="meu-salao" required />
+                    <span class="input-group-text">.suaapp.com</span>
+                </div>
+                <div class="form-text small">Só letras minúsculas, números e hífen. É o endereço que suas clientes vão usar.</div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label small fw-medium text-secondary">Nome do salão</label>
+                <input type="text" asp-for="SalonName" class="form-control form-control-lg rounded-3 fs-6"
+                       placeholder="Ex: Studio Bella" required />
+            </div>
+
+            <hr class="text-muted my-4" />
+            <p class="text-muted small fw-semibold text-uppercase mb-3">Seus dados de acesso (administrador)</p>
+
+            <div class="mb-3">
+                <label class="form-label small fw-medium text-secondary">Seu nome</label>
+                <input type="text" asp-for="OwnerName" class="form-control form-control-lg rounded-3 fs-6"
+                       placeholder="Seu nome completo" autocomplete="name" required />
+            </div>
+            <div class="mb-3">
+                <label class="form-label small fw-medium text-secondary">E-mail</label>
+                <input type="email" asp-for="OwnerEmail" class="form-control form-control-lg rounded-3 fs-6"
+                       placeholder="seu-email@exemplo.com" autocomplete="email" required />
+            </div>
+            <div class="mb-3">
+                <label class="form-label small fw-medium text-secondary">Número do Celular</label>
+                <input type="tel" asp-for="OwnerPhone" class="form-control form-control-lg rounded-3 fs-6"
+                       placeholder="5515999999999" autocomplete="tel" required />
+            </div>
+            <div class="mb-3">
+                <label class="form-label small fw-medium text-secondary">Senha</label>
+                <input type="password" asp-for="OwnerPassword" class="form-control form-control-lg rounded-3 fs-6"
+                       placeholder="Mínimo 8 caracteres" autocomplete="new-password" required />
+                <div class="form-text small">Use pelo menos 8 caracteres, com letras e números.</div>
+            </div>
+            <div class="mb-4">
+                <label class="form-label small fw-medium text-secondary">Repita a Senha</label>
+                <input type="password" asp-for="ConfirmPassword" class="form-control form-control-lg rounded-3 fs-6"
+                       placeholder="Confirme sua senha" autocomplete="new-password" required />
+            </div>
+            <div class="d-grid">
+                <button type="submit" class="btn btn-brand py-3 rounded-3 font-medium fs-6">Criar meu salão</button>
+            </div>
+        </form>
+    </div>
+</div>
