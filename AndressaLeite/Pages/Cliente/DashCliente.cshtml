@@ -38,7 +38,7 @@
                     <div>
                         <h6 class="fw-bold mb-1">@app.ServiceName</h6>
                         <p class="text-muted small mb-1">Profissional: <strong>@app.EmployeeName</strong></p>
-                        <p class="text-dark small mb-0 fw-medium">⏰ @app.StartTime.ToString("dd/MM/yyyy 'às' HH:mm")</p>
+                        <p class="text-dark small mb-0 fw-medium">⏰ @app.StartTime.ToLocalTime().ToString("dd/MM/yyyy 'às' HH:mm")</p>
                         @if (!string.IsNullOrEmpty(app.BookedForName))
                         {
                             <span class="badge bg-light text-dark border mt-2">Para: @app.BookedForName</span>
@@ -55,6 +55,63 @@
     {
         <div class="text-center py-4 text-muted bg-white rounded-4 card-custom">
             <p class="small mb-0">Nenhum agendamento ativo no momento.</p>
+        </div>
+    }
+
+    <div class="text-center mt-3">
+        <a asp-page="/Cliente/DashCliente" asp-route-step="historico" class="text-decoration-none text-secondary small">Ver histórico de agendamentos →</a>
+    </div>
+}
+
+@if (Model.CurrentStep == "historico")
+{
+    <div class="mb-4">
+        <a asp-page="/Cliente/DashCliente" class="text-decoration-none text-secondary small">← Voltar</a>
+        <h4 class="fw-bold mt-2 fs-4">Histórico</h4>
+        <p class="text-muted fs-6">Seus últimos atendimentos concluídos ou cancelados.</p>
+    </div>
+
+    @if (Model.HistoryAppointments.Count == 0)
+    {
+        <div class="text-center py-4 text-muted bg-white rounded-4 card-custom">
+            <p class="small mb-0">Nenhum agendamento concluído ou cancelado ainda.</p>
+        </div>
+    }
+    else
+    {
+        <div class="list-group gap-2">
+            @foreach (var app in Model.HistoryAppointments)
+            {
+                <div class="card card-custom p-3 bg-white mb-2">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <h6 class="fw-bold mb-1">@app.ServiceName</h6>
+                            <p class="text-muted small mb-1">Profissional: <strong>@app.EmployeeName</strong></p>
+                            <p class="text-dark small mb-0">⏰ @app.StartTime.ToLocalTime().ToString("dd/MM/yyyy 'às' HH:mm")</p>
+                        </div>
+                        <span class="badge @(app.Status == "completed" ? "bg-success" : "bg-secondary")">
+                            @(app.Status == "completed" ? "Concluído" : "Cancelado")
+                        </span>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="d-flex justify-content-between mt-3">
+            @if (Model.HistoryPage > 0)
+            {
+                <a asp-page="/Cliente/DashCliente" asp-route-step="historico" asp-route-HistoryPage="@(Model.HistoryPage - 1)"
+                   class="text-decoration-none text-secondary small">← Mais recentes</a>
+            }
+            else
+            {
+                <span></span>
+            }
+            @if (Model.HasMoreHistory)
+            {
+                <a asp-page="/Cliente/DashCliente" asp-route-step="historico" asp-route-HistoryPage="@(Model.HistoryPage + 1)"
+                   class="text-decoration-none text-secondary small">Mais antigos →</a>
+            }
         </div>
     }
 }

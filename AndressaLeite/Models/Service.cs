@@ -19,5 +19,12 @@ namespace AndressaLeite.Models
 
         [Postgrest.Attributes.Column("is_active")]
         public bool IsActive { get; set; } = true;
+
+        /// <summary>
+        /// Salão (tenant) dono deste serviço. Toda query precisa filtrar
+        /// por isto — ver Services/CurrentTenant.cs.
+        /// </summary>
+        [Postgrest.Attributes.Column("tenant_id")]
+        public string TenantId { get; set; } = string.Empty;
     }
 }

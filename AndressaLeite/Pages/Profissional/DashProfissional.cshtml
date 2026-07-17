@@ -4,12 +4,116 @@
     Layout = "/Pages/Shared/_Layout.cshtml";
 }
 
-<div class="mb-4">
-    <h4 class="fw-bold mb-1 fs-4">Olá, @Model.EmployeeName!</h4>
-    <p class="text-muted fs-6">Sua agenda do dia</p>
+<div class="mb-4 d-flex justify-content-between align-items-start">
+    <div>
+        <h4 class="fw-bold mb-1 fs-4">Olá, @Model.EmployeeName!</h4>
+        <p class="text-muted fs-6">@(Model.ShowHistory ? "Histórico de atendimentos" : "Sua agenda do dia")</p>
+    </div>
+    @if (Model.ShowHistory)
+    {
+        <a asp-page="/Profissional/DashProfissional" class="text-decoration-none text-secondary small">← Agenda de hoje</a>
+    }
+    else
+    {
+        <a asp-page="/Profissional/DashProfissional" asp-route-ShowHistory="true" class="text-decoration-none text-secondary small">Ver histórico →</a>
+    }
 </div>
 
-@if (Model.AppointmentsToday.Count == 0)
+@if (!string.IsNullOrEmpty(Model.SuccessMessage))
+{
+    <div class="alert alert-success card-custom border-0 p-3 mb-4 small">@Model.SuccessMessage</div>
+}
+@if (!string.IsNullOrEmpty(Model.ErrorMessage))
+{
+    <div class="alert alert-danger card-custom border-0 p-3 mb-4 small">@Model.ErrorMessage</div>
+}
+
+<!-- Agendamento manual: encaixe, ligação ou walk-in sem conta de cliente -->
+<div class="card card-custom p-4 bg-white mb-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <h5 class="fw-bold mb-0 fs-5">Agendar Manualmente</h5>
+        <button type="button" class="btn btn-sm btn-outline-primary rounded-3"
+                data-bs-toggle="collapse" data-bs-target="#novoAgendamento">
+            + Novo
+        </button>
+    </div>
+    <p class="text-muted small mb-0 mt-1">Registre um encaixe, ligação ou atendimento sem conta de cliente.</p>
+
+    <div class="collapse mt-3" id="novoAgendamento">
+        <form method="post" asp-page-handler="BookManual" class="border-top pt-3">
+            <div class="mb-2">
+                <label class="form-label small text-secondary">Serviço</label>
+                <select name="ServiceId" class="form-select form-select-sm rounded-3" required>
+                    <option value="">Selecione...</option>
+                    @foreach (var svc in Model.TenantServices.Where(s => s.IsActive))
+                    {
+                        <option value="@svc.Id">@svc.Name</option>
+                    }
+                </select>
+            </div>
+            <div class="mb-2">
+                <label class="form-label small text-secondary">Data e Hora</label>
+                <input type="datetime-local" name="SelectedDateTime" class="form-control form-control-sm rounded-3" required />
+            </div>
+            <div class="mb-2">
+                <label class="form-label small text-secondary">Nome da cliente</label>
+                <input type="text" name="BookForName" class="form-control form-control-sm rounded-3" required />
+            </div>
+            <div class="mb-3">
+                <label class="form-label small text-secondary">Telefone da cliente</label>
+                <input type="tel" name="BookForPhone" class="form-control form-control-sm rounded-3" placeholder="5515999999999" required />
+            </div>
+            <button type="submit" class="btn btn-sm btn-brand rounded-3 w-100">Criar Agendamento</button>
+        </form>
+    </div>
+</div>
+
+@if (Model.ShowHistory)
+{
+    @if (Model.HistoryAppointments.Count == 0)
+    {
+        <div class="text-center py-4 text-muted bg-white rounded-4 card-custom">
+            <p class="small mb-0">Nenhum atendimento concluído ou cancelado ainda.</p>
+        </div>
+    }
+    else
+    {
+        <div class="list-group gap-2">
+            @foreach (var appt in Model.HistoryAppointments)
+            {
+                <div class="list-group-item card-custom p-3 bg-white">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <h6 class="fw-bold mb-1">@appt.StartTime.ToLocalTime().ToString("dd/MM HH:mm") — @appt.ClientName</h6>
+                            <p class="text-muted small mb-0">@appt.ServiceName</p>
+                        </div>
+                        <span class="badge @(appt.Status == "completed" ? "bg-success" : "bg-secondary")">
+                            @(appt.Status == "completed" ? "Concluído" : "Cancelado")
+                        </span>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <div class="d-flex justify-content-between mt-3">
+            @if (Model.HistoryPage > 0)
+            {
+                <a asp-page="/Profissional/DashProfissional" asp-route-ShowHistory="true" asp-route-HistoryPage="@(Model.HistoryPage - 1)"
+                   class="text-decoration-none text-secondary small">← Mais recentes</a>
+            }
+            else
+            {
+                <span></span>
+            }
+            @if (Model.HasMoreHistory)
+            {
+                <a asp-page="/Profissional/DashProfissional" asp-route-ShowHistory="true" asp-route-HistoryPage="@(Model.HistoryPage + 1)"
+                   class="text-decoration-none text-secondary small">Mais antigos →</a>
+            }
+        </div>
+    }
+}
+else if (Model.AppointmentsToday.Count == 0)
 {
     <div class="text-center py-4 text-muted bg-white rounded-4 card-custom">
         <p class="small mb-0">Nenhum atendimento para hoje.</p>
@@ -23,7 +127,7 @@ else
             <div class="list-group-item card-custom p-3 bg-white">
                 <div class="d-flex justify-content-between align-items-start">
                     <div>
-                        <h6 class="fw-bold mb-1">@appt.StartTime.ToString("HH:mm") — @appt.ClientName</h6>
+                        <h6 class="fw-bold mb-1">@appt.StartTime.ToLocalTime().ToString("HH:mm") — @appt.ClientName</h6>
                         <p class="text-muted small mb-0">@appt.ServiceName</p>
                         @if (!string.IsNullOrEmpty(appt.BookedForName))
                         {
@@ -32,7 +136,115 @@ else
                     </div>
                     <span class="badge bg-warning text-dark">@appt.Status</span>
                 </div>
+                @if (appt.Status == "pending" || appt.Status == "confirmed")
+                {
+                    <div class="d-flex gap-2 mt-3 flex-wrap">
+                        @if (appt.Status == "pending")
+                        {
+                            <form method="post" asp-page-handler="Confirm" asp-route-id="@appt.Id">
+                                <button type="submit" class="btn btn-sm btn-outline-primary rounded-3">Confirmar</button>
+                            </form>
+                        }
+                        <button type="button" class="btn btn-sm btn-outline-success rounded-3"
+                                data-bs-toggle="collapse" data-bs-target="#complete-@appt.Id">
+                            Concluir atendimento
+                        </button>
+                        @if (appt.WhatsAppLink is not null)
+                        {
+                            <a href="@appt.WhatsAppLink" target="_blank" rel="noopener"
+                               class="btn btn-sm btn-outline-secondary rounded-3">
+                                📲 Lembrar via WhatsApp
+                            </a>
+                        }
+                    </div>
+
+                    <div class="collapse mt-3" id="complete-@appt.Id">
+                        <form method="post" asp-page-handler="Complete" class="border-top pt-3">
+                            <input type="hidden" name="id" value="@appt.Id" />
+                            <div class="mb-2">
+                                <label class="form-label small text-secondary">Serviço prestado</label>
+                                <select name="ServiceId" class="form-select form-select-sm rounded-3">
+                                    @foreach (var svc in Model.TenantServices)
+                                    {
+                                        if (svc.Id == appt.ServiceId)
+                                        {
+                                            <option value="@svc.Id" selected>@svc.Name@(svc.IsActive ? "" : " (inativo)")</option>
+                                        }
+                                        else
+                                        {
+                                            <option value="@svc.Id">@svc.Name@(svc.IsActive ? "" : " (inativo)")</option>
+                                        }
+                                    }
+                                </select>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small text-secondary">Valor cobrado (R$)</label>
+                                <input type="number" step="0.01" min="0" name="ActualRevenue"
+                                       value="@appt.SuggestedRevenue.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                                       class="form-control form-control-sm rounded-3" required />
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label small text-secondary">Forma de pagamento</label>
+                                <select name="PaymentMethod" class="form-select form-select-sm rounded-3" required>
+                                    <option value="">Selecione...</option>
+                                    <option value="dinheiro">Dinheiro</option>
+                                    <option value="pix">Pix</option>
+                                    <option value="cartao_debito">Cartão de Débito</option>
+                                    <option value="cartao_credito">Cartão de Crédito</option>
+                                    <option value="outro">Outro</option>
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label small text-secondary">Observações</label>
+                                <textarea name="Notes" class="form-control form-control-sm rounded-3" rows="2" maxlength="500"></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-sm btn-success rounded-3 w-100">Confirmar Conclusão</button>
+                        </form>
+                    </div>
+                }
             </div>
         }
     </div>
 }
+
+<!-- Meus Serviços: preço/duração personalizados por serviço -->
+<div class="card card-custom p-4 bg-white mt-4">
+    <h5 class="fw-bold mb-1 fs-5">Meus Serviços</h5>
+    <p class="text-muted small mb-3">Personalize seu preço e duração média por serviço. Deixe em branco pra usar o padrão do salão.</p>
+
+    @if (Model.TenantServices.Where(s => s.IsActive).Any())
+    {
+        <div class="list-group gap-2">
+            @foreach (var svc in Model.TenantServices.Where(s => s.IsActive))
+            {
+                Model.MyServiceOverrides.TryGetValue(svc.Id, out var ov);
+                <div class="list-group-item border-0 px-0">
+                    <form method="post" asp-page-handler="UpdateMyService">
+                        <input type="hidden" name="ServiceId" value="@svc.Id" />
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="fw-bold mb-0 small">@svc.Name</h6>
+                            <span class="text-muted" style="font-size: 0.75rem;">Padrão do salão: R$ @svc.Price &middot; @svc.DurationMinutes min</span>
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <input type="number" step="0.01" min="0" name="Price" placeholder="Meu preço (R$)"
+                                       value="@(ov?.Price?.ToString(System.Globalization.CultureInfo.InvariantCulture))"
+                                       class="form-control form-control-sm rounded-3" />
+                            </div>
+                            <div class="col-6">
+                                <input type="number" step="1" min="1" name="DurationMinutes" placeholder="Minha duração (min)"
+                                       value="@ov?.DurationMinutes"
+                                       class="form-control form-control-sm rounded-3" />
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-sm btn-outline-primary rounded-3 mt-2">Salvar</button>
+                    </form>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <p class="text-muted small mb-0">Nenhum serviço ativo cadastrado pelo salão ainda.</p>
+    }
+</div>

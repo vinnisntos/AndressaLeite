@@ -9,9 +9,14 @@ namespace AndressaLeite.Models
         [Postgrest.Attributes.PrimaryKey("id", true)]
         public string Id { get; set; } = string.Empty;
 
-        [Required]
+        /// <summary>
+        /// Nulo quando o agendamento foi criado manualmente pela
+        /// profissional/admin pra alguém sem conta de cliente (usa
+        /// BookedForName/BookedForPhone nesse caso — ver Fase 5 do
+        /// roadmap no readme.txt).
+        /// </summary>
         [Postgrest.Attributes.Column("client_id")]
-        public string ClientId { get; set; } = string.Empty;
+        public string? ClientId { get; set; }
 
         [Required]
         [Postgrest.Attributes.Column("employee_id")]
@@ -53,5 +58,30 @@ namespace AndressaLeite.Models
         [Range(0, 999999.99, ErrorMessage = "Receita real inválida.")]
         [Postgrest.Attributes.Column("actual_revenue")]
         public decimal ActualRevenue { get; set; }
+
+        /// <summary>
+        /// Salão (tenant) dono deste agendamento. Toda query precisa
+        /// filtrar por isto — ver Services/CurrentTenant.cs.
+        /// </summary>
+        [Postgrest.Attributes.Column("tenant_id")]
+        public string TenantId { get; set; } = string.Empty;
+
+        /// <summary>
+        /// dinheiro | pix | cartao_debito | cartao_credito | outro.
+        /// Preenchida na conclusão do atendimento (ver check constraint
+        /// na migration 0003).
+        /// </summary>
+        [RegularExpression("^(dinheiro|pix|cartao_debito|cartao_credito|outro)$",
+            ErrorMessage = "Forma de pagamento inválida.")]
+        [Postgrest.Attributes.Column("payment_method")]
+        public string? PaymentMethod { get; set; }
+
+        /// <summary>
+        /// Observações registradas ao concluir o atendimento (ex.:
+        /// preferências da cliente, motivo de desconto).
+        /// </summary>
+        [StringLength(500, ErrorMessage = "Observações com no máximo 500 caracteres.")]
+        [Postgrest.Attributes.Column("notes")]
+        public string? Notes { get; set; }
     }
 }

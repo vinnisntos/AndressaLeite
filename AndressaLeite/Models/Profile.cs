@@ -6,7 +6,8 @@ namespace AndressaLeite.Models
     [Postgrest.Attributes.Table("profiles")]
     public class Profile : BaseModel
     {
-        [Postgrest.Attributes.PrimaryKey("id", false)]
+        // 🔴 CORRIGIDO: Alterado para 'true' para forçar o C# a enviar o GUID gerado no cadastro
+        [Postgrest.Attributes.PrimaryKey("id", true)]
         public string Id { get; set; } = string.Empty;
 
         [Required(ErrorMessage = "O nome completo é obrigatório.")]
@@ -35,5 +36,25 @@ namespace AndressaLeite.Models
             ErrorMessage = "Telefone inválido. Use DDI + DDD + número (somente dígitos).")]
         [Postgrest.Attributes.Column("phone")]
         public string Phone { get; set; } = string.Empty;
+
+        // =================================================================
+        // NOVOS CAMPOS: Para controle de autenticação manual via C#
+        // =================================================================
+
+        [Required(ErrorMessage = "O e-mail é obrigatório.")]
+        [EmailAddress(ErrorMessage = "Informe um e-mail válido.")]
+        [Postgrest.Attributes.Column("email")]
+        public string Email { get; set; } = string.Empty;
+
+        [Postgrest.Attributes.Column("password_hash")]
+        public string PasswordHash { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Salão (tenant) ao qual este perfil pertence. Toda query precisa
+        /// filtrar por isto — ver Services/CurrentTenant.cs.
+        /// </summary>
+        [Required]
+        [Postgrest.Attributes.Column("tenant_id")]
+        public string TenantId { get; set; } = string.Empty;
     }
 }

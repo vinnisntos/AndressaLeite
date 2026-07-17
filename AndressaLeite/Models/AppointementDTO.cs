@@ -9,5 +9,6 @@
         public string EmployeeName { get; set; } = string.Empty;
         public DateTime StartTime { get; set; }
         public string? BookedForName { get; set; }
+        public string Status { get; set; } = "pending";
     }
 }

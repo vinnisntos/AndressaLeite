@@ -6,7 +6,7 @@
 
 <div class="mb-4">
     <h3 class="fw-bold fs-4">Painel de Controle</h3>
-    <p class="text-muted small">Gestão Geral do Studio Bella (Andressa)</p>
+    <p class="text-muted small">Gestão Geral do @CurrentTenant.Name</p>
 </div>
 
 <!-- Mensagens de Sucesso/Erro -->
@@ -42,6 +42,100 @@
             <h3 class="fw-bold text-primary mt-1 mb-0">R$ @Model.EstimatedRevenue</h3>
         </div>
     </div>
+    <div class="col-6">
+        <div class="card card-custom p-3 bg-white border-start border-4 border-warning">
+            <span class="text-muted small text-uppercase fw-semibold">Concluídos Hoje</span>
+            <h3 class="fw-bold text-warning mt-1 mb-0">@Model.CompletedToday</h3>
+        </div>
+    </div>
+    <div class="col-6">
+        <div class="card card-custom p-3 bg-white border-start border-4 border-info">
+            <span class="text-muted small text-uppercase fw-semibold">Receita Esperada Hoje</span>
+            <h3 class="fw-bold text-info mt-1 mb-0">R$ @Model.EstimatedRevenueToday</h3>
+        </div>
+    </div>
+</div>
+
+<!-- Formas de Pagamento (mês atual) -->
+<div class="card card-custom p-4 bg-white mb-4">
+    <h5 class="fw-bold mb-3 fs-5">Formas de Pagamento (mês atual)</h5>
+    @if (Model.PaymentMethodBreakdown.Count == 0)
+    {
+        <p class="text-muted small mb-0">Nenhum atendimento concluído com pagamento registrado este mês ainda.</p>
+    }
+    else
+    {
+        <div class="list-group gap-2">
+            @foreach (var pm in Model.PaymentMethodBreakdown)
+            {
+                <div class="list-group-item d-flex justify-content-between align-items-center px-0 border-0">
+                    <div>
+                        <h6 class="fw-bold mb-0 small">@AndressaLeite.Pages.Admin.DashAdminModel.FormatPaymentMethod(pm.Method)</h6>
+                        <span class="text-muted" style="font-size: 0.75rem;">@pm.Count atendimento(s)</span>
+                    </div>
+                    <span class="fw-bold text-success">R$ @pm.Total</span>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- Observações recentes -->
+<div class="card card-custom p-4 bg-white mb-4">
+    <h5 class="fw-bold mb-3 fs-5">Observações Recentes</h5>
+    @if (Model.RecentNotes.Count == 0)
+    {
+        <p class="text-muted small mb-0">Nenhuma observação registrada em atendimentos concluídos ainda.</p>
+    }
+    else
+    {
+        <div class="list-group gap-2">
+            @foreach (var note in Model.RecentNotes)
+            {
+                <div class="list-group-item px-0 border-0">
+                    <div class="d-flex justify-content-between align-items-start mb-1">
+                        <h6 class="fw-bold mb-0 small">@note.ServiceName — @note.ClientName</h6>
+                        <span class="text-muted" style="font-size: 0.7rem; white-space: nowrap;">@note.StartTime.ToLocalTime().ToString("dd/MM HH:mm")</span>
+                    </div>
+                    <p class="text-muted small mb-1">@note.Notes</p>
+                    <span class="badge bg-light text-dark border">@AndressaLeite.Pages.Admin.DashAdminModel.FormatPaymentMethod(note.PaymentMethod)</span>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+<!-- Horário de Funcionamento -->
+<div class="card card-custom p-4 bg-white mb-4">
+    <h5 class="fw-bold mb-3 fs-5">Horário de Funcionamento</h5>
+    <form method="post" asp-page-handler="UpdateBusinessHours">
+        <div class="row g-2 mb-3">
+            <div class="col-6">
+                <label class="form-label small text-secondary">Abertura</label>
+                <input type="time" name="BusinessOpenTime" class="form-control rounded-3"
+                       value="@Model.CurrentBusinessOpenTime" required />
+            </div>
+            <div class="col-6">
+                <label class="form-label small text-secondary">Fechamento</label>
+                <input type="time" name="BusinessCloseTime" class="form-control rounded-3"
+                       value="@Model.CurrentBusinessCloseTime" required />
+            </div>
+        </div>
+        <div class="row g-2 mb-3">
+            <div class="col-6">
+                <label class="form-label small text-secondary">Início do almoço</label>
+                <input type="time" name="LunchStartTime" class="form-control rounded-3"
+                       value="@Model.CurrentLunchStartTime" />
+            </div>
+            <div class="col-6">
+                <label class="form-label small text-secondary">Fim do almoço</label>
+                <input type="time" name="LunchEndTime" class="form-control rounded-3"
+                       value="@Model.CurrentLunchEndTime" />
+            </div>
+        </div>
+        <div class="form-text small mb-3">Deixe os campos de almoço em branco se o salão não fizer pausa.</div>
+        <button type="submit" class="btn btn-brand btn-sm w-100 py-2 rounded-3">Salvar Horário</button>
+    </form>
 </div>
 
 <!-- Controle de Equipe / Profissionais -->
@@ -68,7 +162,7 @@
     </form>
 </div>
 
-<div class="card card-custom p-4 bg-white">
+<div class="card card-custom p-4 bg-white mb-4">
     <h5 class="fw-bold mb-3 fs-5">Profissionais Ativas</h5>
     <div class="list-group list-group-flush gap-2">
         @foreach (var emp in Model.ActiveEmployees)
@@ -84,4 +178,62 @@
             </div>
         }
     </div>
+</div>
+
+<!-- Gestão de Serviços -->
+<div class="card card-custom p-4 bg-white mb-4">
+    <h5 class="fw-bold mb-3 fs-5">Cadastrar Serviço</h5>
+    <form method="post" asp-page-handler="AddService">
+        <div class="mb-3">
+            <label class="form-label small text-secondary">Nome do Serviço</label>
+            <input type="text" name="SrvName" class="form-control rounded-3" placeholder="Ex: Design de Sobrancelha" required />
+        </div>
+        <div class="row g-2 mb-3">
+            <div class="col-6">
+                <label class="form-label small text-secondary">Preço (R$)</label>
+                <input type="number" step="0.01" min="0.01" name="SrvPrice" class="form-control rounded-3" placeholder="60.00" required />
+            </div>
+            <div class="col-6">
+                <label class="form-label small text-secondary">Duração (min)</label>
+                <input type="number" step="1" min="1" name="SrvDurationMinutes" class="form-control rounded-3" placeholder="45" required />
+            </div>
+        </div>
+        <button type="submit" class="btn btn-brand btn-sm w-100 py-2 rounded-3">Adicionar Serviço</button>
+    </form>
+</div>
+
+<div class="card card-custom p-4 bg-white">
+    <h5 class="fw-bold mb-3 fs-5">Serviços Cadastrados</h5>
+    @if (Model.AllServices.Count == 0)
+    {
+        <p class="text-muted small mb-0">Nenhum serviço cadastrado ainda. Cadastre acima para liberar o agendamento para as clientes.</p>
+    }
+    else
+    {
+        <div class="list-group list-group-flush gap-2">
+            @foreach (var srv in Model.AllServices)
+            {
+                <div class="list-group-item d-flex justify-content-between align-items-center px-0 border-0">
+                    <div>
+                        <h6 class="fw-bold mb-0 small">
+                            @srv.Name
+                            @if (!srv.IsActive)
+                            {
+                                <span class="badge bg-secondary ms-1">Inativo</span>
+                            }
+                        </h6>
+                        <span class="text-muted" style="font-size: 0.75rem;">R$ @srv.Price &middot; @srv.DurationMinutes min</span>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <form method="post" asp-page-handler="ToggleService" asp-route-id="@srv.Id">
+                            <button type="submit" class="btn btn-sm btn-link text-decoration-none small">@(srv.IsActive ? "Desativar" : "Reativar")</button>
+                        </form>
+                        <form method="post" asp-page-handler="RemoveService" asp-route-id="@srv.Id">
+                            <button type="submit" class="btn btn-sm btn-link text-danger text-decoration-none small">Remover</button>
+                        </form>
+                    </div>
+                </div>
+            }
+        </div>
+    }
 </div>

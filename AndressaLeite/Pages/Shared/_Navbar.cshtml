@@ -9,9 +9,10 @@
 
 <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom sticky-top py-3">
     <div class="container-fluid px-4">
-        <!-- Brand/Logo -->
+        <!-- Brand/Logo: nome do salão do tenant atual, ou o nome da
+             plataforma quando não há tenant resolvido (domínio raiz). -->
         <a class="navbar-brand fw-bold text-uppercase tracking-tight fs-6" asp-page="/Index">
-            Studio Bella
+            @(CurrentTenant.IsResolved ? CurrentTenant.Name : "MarcAi")
         </a>
 
         <!-- Toggle Button (Mobile) -->
@@ -28,7 +29,23 @@
                     <a class="nav-link" asp-page="/Index">Home</a>
                 </li>
 
-                @if (isAuthenticated)
+                @if (isAuthenticated && userRole.Equals("superadmin", StringComparison.OrdinalIgnoreCase))
+                {
+                    <!-- Superadmin da plataforma: cross-tenant, não tem
+                         Meu Perfil nem dashboard de salão nenhum. -->
+                    <li class="nav-item">
+                        <a class="nav-link" asp-page="/SuperAdmin/Dashboard">
+                            <i class="bi bi-shield-lock"></i> Painel MarcAi
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" asp-page="/SuperAdmin/Security">Segurança</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link text-danger" asp-page="/Auth/Logout">Sair</a>
+                    </li>
+                }
+                else if (isAuthenticated)
                 {
                     <!-- Meu Perfil (apenas autenticado) -->
                     <li class="nav-item">
@@ -45,15 +62,18 @@
                         </li>
                     }
 
-                    <!-- Dashboard da Role (client/employee) -->
+                    <!-- Dashboard da Role (client/employee/admin) -->
                     @if (userRole.Equals("client", StringComparison.OrdinalIgnoreCase))
                     {
                         <li class="nav-item">
                             <a class="nav-link" asp-page="/Cliente/DashCliente">Meus Agendamentos</a>
                         </li>
                     }
-                    else if (userRole.Equals("employee", StringComparison.OrdinalIgnoreCase))
+                    else if (userRole.Equals("employee", StringComparison.OrdinalIgnoreCase) ||
+                             userRole.Equals("admin", StringComparison.OrdinalIgnoreCase))
                     {
+                        <!-- Admin é "profissional premium" (Fase 6 do roadmap):
+                             tem agenda própria além do Painel Admin. -->
                         <li class="nav-item">
                             <a class="nav-link" asp-page="/Profissional/DashProfissional">Minha Agenda</a>
                         </li>
@@ -64,15 +84,25 @@
                         <a class="nav-link text-danger" asp-page="/Auth/Logout">Sair</a>
                     </li>
                 }
-                else
+                else if (CurrentTenant.IsResolved)
                 {
-                    <!-- Login/Cadastro (não autenticado) -->
+                    <!-- Login/Cadastro (não autenticado, dentro do subdomínio de um salão) -->
                     <li class="nav-item">
                         <a class="nav-link" asp-page="/Auth/Login">Entrar</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link btn btn-brand px-3 text-white rounded-pill" asp-page="/Auth/Cadastro">
                             Cadastrar
+                        </a>
+                    </li>
+                }
+                else
+                {
+                    <!-- Contexto plataforma (sem tenant resolvido): não há
+                         Login/Cadastro de salão nenhum aqui, só o onboarding. -->
+                    <li class="nav-item">
+                        <a class="nav-link btn btn-brand px-3 text-white rounded-pill" asp-page="/Onboarding/CriarSalao">
+                            Criar meu salão
                         </a>
                     </li>
                 }
