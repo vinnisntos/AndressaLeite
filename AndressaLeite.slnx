@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="AndressaLeite/AndressaLeite.csproj" />
+  <Project Path="AndressaLeite.Tests/AndressaLeite.Tests.csproj" />
 </Solution>
