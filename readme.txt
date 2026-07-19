@@ -252,30 +252,18 @@ Quatro niveis de usuario:
    (necessarios para operar em producao com clientes reais)
 ------------------------------------------------------------------------
 
-4.1. [BLOQUEADO — decisao de produto pendente, nao de codigo] Nao existe
-     fluxo de "esqueci minha senha"
-     Autenticacao 100% manual (BCrypt na tabela profiles), sem nenhum
-     caminho de recuperacao de senha. Vale por tenant: cada salao tem
-     seus proprios usuarios travados igualmente sem esse fluxo. BLOQUEIO
-     REAL: precisa de um provedor de e-mail transacional pra enviar o
-     token de reset — perguntado explicitamente em 2026-07-17 (qual
-     provedor usar: SendGrid, Resend, SMTP proprio, etc.) e a resposta foi
-     "pular por agora", ou seja, adiado de proposito, nao esquecido. Sem
-     essa escolha, nao ha como implementar este item (nao e um problema de
-     falta de tempo/codigo, e falta de uma decisao de infraestrutura que
-     so voce pode tomar). Enquanto isso nao existe, a unica forma de
-     recuperar acesso e reset manual de senha direto no Supabase (voce
-     gera um novo hash BCrypt e atualiza a linha em profiles).
+4.1. [RESOLVIDO 2026-07-19/20 — ver secao 12] Fluxo de "esqueci minha
+     senha" implementado
+     Pages/Auth/EsqueciSenha.cshtml(.cs) + RedefinirSenha.cshtml(.cs),
+     via Resend. Testado de ponta a ponta com envio real (nao so em
+     ambiente de teste) — ver secao 12 pro detalhe completo, inclusive
+     dos bugs achados e corrigidos no caminho.
 
-4.2. [BLOQUEADO — mesmo motivo do 4.1] Sem verificacao de e-mail no
-     cadastro/onboarding
-     Nem o cadastro de cliente nem a criacao de um salao novo confirmam
-     que o e-mail informado pertence a pessoa. Mesmo bloqueio do item
-     4.1: exige provedor de e-mail pra enviar o link/codigo de
-     verificacao, decisao adiada em 2026-07-17. Assim que um provedor for
-     escolhido, os itens 4.1, 4.2, 5.3 e 5.6 (todos os gaps que dependem
-     de enviar e-mail) podem ser desenvolvidos juntos, ja que
-     compartilhariam a mesma configuracao/servico de envio.
+4.2. [RESOLVIDO 2026-07-19/20 — ver secao 12] Verificacao de e-mail no
+     cadastro/onboarding implementada
+     Pages/Auth/VerificarEmail.cshtml(.cs), disparada no cadastro de
+     cliente e na criacao de salao. Verificacao "soft" — nao bloqueia
+     login, so mostra um banner ate confirmar. Ver secao 12.
 
 4.3. [RESOLVIDO] Trigger de cancelamento — agora existe de verdade
      O comentario em DashCliente.cshtml.cs pressupunha uma
@@ -424,14 +412,15 @@ Quatro niveis de usuario:
      acumulado.
 5.2. [RESOLVIDO — ver secao 7, Fase 3] Campo de observacoes/notas no
      agendamento, preenchido pela profissional na conclusao do atendimento.
-5.3. [BLOQUEADO — mesmo motivo do 4.1/4.2] Sem notificacao por e-mail/SMS
-     de confirmacao ou lembrete de agendamento
-     O lembrete via WhatsApp da secao 7.5 cobre parte disso na pratica
-     (o app ja monta a mensagem e o link, so nao envia sozinho), mas
-     continua sendo um link manual que a profissional clica, nao um envio
-     automatico por e-mail/SMS/WhatsApp Business API. Mesmo bloqueio:
-     nenhum provedor de e-mail/SMS escolhido ainda (decisao adiada em
-     2026-07-17 — ver 4.1).
+5.3. [RESOLVIDO 2026-07-19/20 — ver secao 12] Lembrete automatico por
+     e-mail implementado
+     Services/AppointmentReminderService.cs — BackgroundService novo
+     (primeira infraestrutura de job agendado do projeto), manda e-mail
+     ~24h antes do horario pra clientes com conta (o lembrete via
+     WhatsApp da secao 7.5 continua sendo o unico caminho pra
+     agendamentos feitos pra alguem sem conta). Testado de ponta a ponta
+     com envio real. SMS/WhatsApp Business API automatico continuam fora
+     de escopo.
 5.4. [RESOLVIDO] Tela de historico de agendamentos concluidos/cancelados
      DashCliente ganhou um passo "historico" (link "Ver historico de
      agendamentos ->") listando agendamentos completed/cancelled, com
@@ -445,22 +434,26 @@ Quatro niveis de usuario:
 5.5. Buscas de nome de servico/profissional/cliente fazem uma query por
      id distinto em memoria (sem JOIN nativo do PostgREST) — aceitavel no
      volume de poucos tenants pequenos, revisar se crescer muito.
-5.6. [BLOQUEADO — mesmo motivo do 4.1/4.2/5.3] Convite de equipe por
-     e-mail
-     Hoje o admin cria a conta do profissional direto com uma senha —
-     funciona, mas nao e o fluxo "convide por e-mail e a pessoa define a
-     propria senha". Mesmo bloqueio de provedor de e-mail (ver 4.1).
-     Continua fora do escopo do roadmap da secao 7 (que ja foi
-     inteiramente concluido — ver 7.8) e so pode avancar quando o provedor
-     for escolhido.
+5.6. [RESOLVIDO 2026-07-19/20 — ver secao 12] Convite de equipe por
+     e-mail implementado
+     OnPostAddEmployeeAsync (que criava a conta direto com senha) virou
+     OnPostInviteEmployeeAsync — o admin so informa nome/e-mail/telefone,
+     a profissional aceita o convite e define a propria senha em
+     Pages/Auth/AceitarConvite.cshtml.cs. Testado de ponta a ponta com
+     envio real.
 
 ------------------------------------------------------------------------
 6. COMO RODAR O PROJETO LOCALMENTE (resumo)
 ------------------------------------------------------------------------
-1. Segredos do Supabase via user-secrets (nao editar appsettings.json
-   com valores reais):
+1. Segredos do Supabase e Resend via user-secrets (nao editar
+   appsettings.json com valores reais):
      dotnet user-secrets set "Supabase:Url" "https://SEU-PROJETO.supabase.co"
      dotnet user-secrets set "Supabase:SecretKey" "sb_secret_..."
+     dotnet user-secrets set "Resend:ApiKey" "re_..."
+     dotnet user-secrets set "Resend:FromAddress" "MarcAi <remetente@seu-dominio-verificado>"
+   (Resend exige um dominio verificado — Settings > Domains no painel
+   deles — pra mandar e-mail pra qualquer destinatario; sem isso, so
+   manda pro proprio e-mail da conta Resend. Ver secao 12.)
 2. Aplique, NESTA ORDEM (ver convencao de migrations na secao 7.7), no
    SQL Editor do painel do Supabase:
      supabase/migrations/0001_auth_columns_and_rls.sql
@@ -469,13 +462,23 @@ Quatro niveis de usuario:
      supabase/migrations/0004_platform_admins.sql
      supabase/migrations/0005_superadmin_security.sql
      supabase/migrations/0006_cancellation_trigger_and_overlap_constraint.sql  <- JA RODADA (confirmado 2026-07-19, ver 3.7/10.5)
+     supabase/migrations/0007_email_action_tokens.sql
+     supabase/migrations/0008_team_invites.sql
+     supabase/migrations/0009_drop_legacy_global_email_constraint.sql
    (idempotentes, podem rodar mais de uma vez). A 0002 semeia
    automaticamente o tenant "studio-bella" com os dados que ja existiam;
    a 0004 semeia sua conta de superadmin (ver secao 3.8); a 0005 adiciona
    as colunas de 2FA (ver secao 3.9); a 0006 cria a trigger de bloqueio de
    cancelamento tardio e a EXCLUDE constraint anti-overlap (ver 4.3/4.8) —
    exige a extensao btree_gist (a propria migration ja faz o `create
-   extension if not exists`).
+   extension if not exists`); a 0007/0008 sao da rodada de e-mail
+   transacional (ver secao 12). IMPORTANTE depois de rodar 0007/0008:
+   se o app der erro "Could not find the table ... in the schema cache"
+   (PGRST205), o PostgREST do Supabase ainda nao recarregou o cache de
+   schema — va em Settings > API no painel e clique em "Reload schema",
+   ou abra a tabela nova uma vez pelo Table Editor (ambos forcam o
+   reload; o `NOTIFY pgrst, 'reload schema';` no SQL Editor nem sempre
+   chega ao PostgREST hospedado da Supabase).
 3. appsettings.Development.json ja tem "Tenancy:RootDomain": "localhost".
    Navegadores modernos resolvem qualquer *.localhost para 127.0.0.1
    nativamente, sem editar hosts file.
@@ -933,14 +936,14 @@ Nao ha mais itens de codigo pendentes fora dessas cinco categorias.
 Sessao dedicada a fechar o ciclo de itens nao-tecnicos que bloqueavam
 "vender o sistema" (analise pedida pelo usuario). Decisoes tomadas:
 
-9.1. Provedor de e-mail transacional: RESEND
-     Desbloqueia (ainda NAO implementados nesta rodada, so a decisao foi
-     tomada): 4.1 (esqueci minha senha), 4.2 (verificacao de e-mail), 5.3
-     (notificacao automatica), 5.6 (convite de equipe por e-mail). Proximo
-     passo de codigo: criar conta Resend, verificar dominio (SPF/DKIM),
-     adicionar pacote/HTTP client pro envio, e implementar os 4 itens
-     juntos (compartilham a mesma configuracao de envio, como ja previsto
-     na secao 4.2).
+9.1. [IMPLEMENTADO 2026-07-19/20 — ver secao 12] Provedor de e-mail
+     transacional: RESEND
+     Desbloqueou 4.1 (esqueci minha senha), 4.2 (verificacao de e-mail),
+     5.3 (lembrete automatico), 5.6 (convite de equipe por e-mail) — os
+     4 implementados juntos nesta rodada, dominio verificado
+     (noreply.vinnisantos.com.br) e testados de ponta a ponta com envio
+     real. Detalhe completo, inclusive dos bugs achados no caminho, na
+     secao 12.
 
 9.2. Gateway de pagamento/billing: ASAAS
      Desbloqueia 4.9 (billing/assinatura, hoje so toggle manual do
@@ -1238,3 +1241,195 @@ O que NAO foi coberto nesta rodada (fora do escopo dos achados da secao
     Asaas, provedor de e-mail/Resend, deploy real em EC2, branding por
     tenant) continuam exatamente como estavam — nao fizeram parte do
     pedido desta rodada.
+
+------------------------------------------------------------------------
+12. E-MAIL TRANSACIONAL (RESEND) — IMPLEMENTADO E VALIDADO (2026-07-19/20)
+------------------------------------------------------------------------
+Pedido do usuario: implementar os 4 itens que a decisao do Resend (9.1)
+desbloqueou, todos juntos numa rodada. Desenho completo aprovado via
+plano antes de codar (ver o plano da sessao); resumo do que foi feito e
+do que foi encontrado no caminho abaixo.
+
+12.1. O que foi construido
+      - Services/IEmailService.cs + ResendEmailService.cs: HttpClient
+        tipado, POST pra api.resend.com/emails, sem pacote NuGet novo.
+      - Services/EmailTokenService.cs: classe estatica (mesmo molde do
+        TotpService) — gera token aleatorio de 256 bits, guarda so o HASH
+        SHA-256 no banco (nunca o token cru — ele viaja inteiro numa URL
+        de e-mail, entao um vazamento do banco sozinho nao deve virar
+        takeover de conta). Testado em AndressaLeite.Tests/
+        EmailTokenServiceTests.cs (8 testes novos, 57/57 no total).
+      - Migration 0007: profiles ganha action_token_hash/action_token_type
+        (check 'password_reset'|'email_verification')/
+        action_token_expires_at (par UNICO compartilhado entre reset e
+        verificacao — nao dois pares dedicados) + email_verified
+        (verificacao "soft", nao bloqueia login). appointments ganha
+        reminder_sent_at (idempotencia do lembrete).
+      - Migration 0008: tabela nova team_invites (mesmo padrao de
+        platform_admins — identidade que nao cabe em profiles fica numa
+        tabela separada). O profile da profissional so nasce quando ela
+        aceita o convite, evitando um estado "profile sem senha usavel".
+      - 4.1 Esqueci senha: Pages/Auth/EsqueciSenha.cshtml(.cs) +
+        RedefinirSenha.cshtml(.cs). Mensagem sempre generica (defesa
+        contra enumeracao de e-mail) + piso de 250ms de resposta pro
+        caminho "nao encontrado" nao ficar perceptivelmente mais rapido
+        que o caminho "encontrado". Nova policy de rate limit
+        "password-reset" (3/15min por IP, mais apertada que signup por
+        nao ter custo de conta na frente).
+      - 4.2 Verificacao de e-mail: Pages/Auth/VerificarEmail.cshtml(.cs),
+        disparada em Cadastro.cshtml.cs e CriarSalao.cshtml.cs apos o
+        insert (sempre em try/catch so-loga — Resend fora do ar NUNCA
+        pode impedir um cadastro de completar). Banner discreto em
+        _Navbar.cshtml quando `email_verified=false` (via claim no
+        cookie, "email_verified" — ver AuthorizationService.
+        EmailVerifiedClaimType; fica desatualizado ate o proximo login se
+        verificado no meio de uma sessao ja aberta, aceito conscientemente
+        mesmo espirito de outras janelas de staleness ja existentes no
+        projeto), com link "Reenviar e-mail" (Pages/Perfil.cshtml.cs,
+        OnPostResendVerificationAsync).
+      - 5.3 Lembrete automatico: Services/AppointmentReminderService.cs —
+        primeiro BackgroundService do projeto (nao existia NENHUMA
+        infraestrutura de job agendado antes). PeriodicTimer de 15min,
+        janela fixa de ~24h antes (23-25h) pra manter o horario de envio
+        previsivel. Consulta appointments/tenants/profiles direto, sem
+        depender de CurrentTenant (roda cross-tenant de proposito, nao
+        existe requisicao HTTP nesse contexto). Limitacao assumida por
+        escrito: so funciona
+        certo com UMA instancia do container rodando (sem lock
+        distribuido) — bate com o deploy atual (EC2 single-instance via
+        docker-compose, secao 9.3); se o projeto escalar pra multiplas
+        instancias, precisa de lock distribuido ou mover pra cron externo
+        antes disso religar. So manda pra agendamentos com ClientId (cliente
+        com conta) — agendamento feito pra alguem sem conta continua so no
+        WhatsApp manual.
+      - 5.6 Convite de equipe: OnPostAddEmployeeAsync (DashAdmin.cshtml.cs)
+        virou OnPostInviteEmployeeAsync — sem campo de senha no formulario
+        (removido de proposito, nao mantido como fallback). Nova lista
+        "Convites Pendentes" com botao cancelar. Pages/Auth/
+        AceitarConvite.cshtml.cs cria o profile de verdade so no aceite.
+
+12.2. BUGS ENCONTRADOS E CORRIGIDOS (nenhum deles no codigo da rodada de
+      QA anterior — sao achados novos desta rodada de e-mail; todos os 3
+      corrigidos a pedido do usuario antes de commitar)
+
+      a) [CORRIGIDO GLOBALMENTE] postgrest-csharp devolve DateTime
+         convertido pro fuso LOCAL da maquina, com Kind=Unspecified em
+         vez de Kind=Utc
+         Achado testando o token de reset: gravado corretamente como
+         2026-07-19T17:29:47+00:00 (UTC), mas ao ler de volta o valor
+         chegava como 2026-07-19T14:29:47 (Kind=Unspecified) numa maquina
+         em UTC-3 (Brasilia) — qualquer comparacao com DateTime.UtcNow
+         ficava errada por 3h (token marcado "expirado" 3h antes da hora
+         real). Em producao (container Docker rodando em UTC, ver
+         Dockerfile) isso passa despercebido porque o offset local e
+         zero ali — so aparece em dev fora de UTC. CONFIRMADO que ja
+         afetava codigo existente ANTES desta rodada: a tela de
+         agendamento mostrando "11:00" pra um horario marcado como
+         "14:00" na sessao de QA anterior, dispensado na hora como
+         "diferenca de fuso esperada", era esse mesmo bug dobrando o erro
+         via .ToLocalTime() em cima de um valor ja mal-convertido —
+         reproduzido de novo e confirmado corrigido nesta rodada (ver
+         teste de verificacao abaixo).
+         CORRECAO (globalizada, nao so nos 4 pontos que motivaram o
+         achado): Services/PostgrestTime.cs (ToTrueUtc) agora e chamado
+         no PROPRIO SETTER das propriedades DateTime/DateTime? que vem de
+         colunas timestamptz — Appointment.StartTime/EndTime/
+         ReminderSentAt, TeamInvite.ExpiresAt/CreatedAt/UsedAt/
+         CancelledAt, Profile.ActionTokenExpiresAt, Tenant.CreatedAt.
+         Corrigir na PROPRIEDADE do modelo, nao em cada ponto de leitura,
+         garante que qualquer uso futuro (e os usos ja existentes em
+         DashCliente.cshtml/DashProfissional.cshtml/DashAdmin.cshtml —
+         exibicao de horario de agendamento — e BuildWhatsAppReminderLink
+         em DashProfissional.cshtml.cs) fica correto automaticamente, sem
+         precisar espalhar chamadas explicitas. Escrita nao e afetada: um
+         DateTime recem-criado com Kind=Utc passa pela funcao sem
+         nenhuma mudanca (ToTrueUtc so age quando Kind != Utc). VALIDADO
+         ao vivo: agendamento criado as 17:00 UTC agora exibe "14:00" no
+         painel do cliente (era "11:00" antes da correcao, no mesmo tipo
+         de caso testado na rodada de QA anterior).
+      b) [CORRIGIDO, incluindo 2 pontos pre-existentes] .Set(x =>
+         x.Campo, null) quebra no postgrest-csharp 3.5.1
+         `ArgumentException: Expected Value to be of Type: String,
+         instead received: .` ao tentar setar uma coluna nullable pra
+         null via `.Where().Set(x, null).Update()`. CORRECAO: trocar pelo
+         padrao "Update() do objeto completo" (mutar o objeto ja
+         carregado em memoria, depois `_supabase.From<T>().Update(objeto)`)
+         — padrao novo no projeto. Corrigido em 5 pontos ao todo: os 2 da
+         rodada de e-mail (RedefinirSenha.cshtml.cs, VerificarEmail.cshtml.cs)
+         e mais 3 achados por grep do mesmo padrao em codigo PRE-EXISTENTE
+         a esta rodada, todos com null genuinamente alcancavel em
+         producao: SuperAdmin/Security.cshtml.cs (OnPostDisableTotpAsync,
+         ja tentava `(string?)null` explicito — o cast nao evitava o bug,
+         desativar 2FA e regenerar o segredo provavelmente falhava
+         silenciosamente antes desta correcao), DashAdmin.cshtml.cs
+         (OnPostUpdateBusinessHoursAsync, LunchStartTime/LunchEndTime
+         ficam null quando o salao nao tem intervalo de almoco — caso
+         normal e ja suportado pela validacao, so nao funcionava de
+         verdade), DashProfissional.cshtml.cs (OnPostUpdateMyServiceAsync,
+         Price/DurationMinutes ficam null quando a profissional volta pro
+         padrao do catalogo). Os 2 ultimos ja tinham o objeto certo
+         (`tenant`/`existing`) buscado do banco em memoria antes do Set()
+         quebrado, entao a correcao foi so trocar pelo Update(objeto) —
+         exceto DashAdmin, que nao tinha o Tenant buscado ainda (so
+         usava CurrentTenant, que nao e um objeto Postgrest), precisou de
+         um fetch novo antes de mutar/salvar.
+      c) [MIGRATION ESCRITA — ACAO NECESSARIA SUA, so voce aplica] Constraint
+         global antiga profiles_email_key ainda ativa, apesar da migration
+         0002 ja ter trocado o indice unico de e-mail pra composto por
+         tenant (tenant_id, lower(email))
+         Descoberto tentando aceitar um convite de equipe com um e-mail
+         que ja era cliente em outro tenant — erro 23505 "duplicate key
+         value violates unique constraint profiles_email_key" (nome de
+         constraint diferente do indice profiles_email_unique_idx
+         documentado na secao 4.2/0001/0002). Ou seja: contrario ao que o
+         proprio readme.txt sempre afirmou ("mesmo e-mail pode existir em
+         saloes diferentes como contas separadas"), isso NAO FUNCIONA de
+         verdade hoje — sobrou uma constraint global de uma versao
+         anterior da tabela profiles (de antes da serie de migrations
+         0001+) que nunca foi dropada. Nao e algo que da pra corrigir em
+         C# — e uma alteracao de schema, que por convencao deste projeto
+         so voce aplica manualmente (secao 7.7: Claude so tem acesso REST,
+         nunca roda migration). ESCREVI a migration
+         supabase/migrations/0009_drop_legacy_global_email_constraint.sql
+         (idempotente, com a query de conferencia do nome real da
+         constraint comentada nela, caso "profiles_email_key" nao seja o
+         nome certo no seu banco) — ACAO NECESSARIA SUA: rodar essa
+         migration no SQL Editor do Supabase (depois da 0008) pra fechar
+         de vez esse gap.
+      d) [OPERACIONAL, NAO E BUG DE CODIGO] Depois de rodar uma migration
+         que cria tabela nova, o PostgREST as vezes nao reconhece a
+         tabela imediatamente
+         `Could not find the table 'public.team_invites' in the schema
+         cache` (PGRST205) por alguns minutos apos rodar a 0008, mesmo a
+         tabela existindo de verdade no Postgres. `NOTIFY pgrst, 'reload
+         schema';` no SQL Editor NAO resolveu desta vez; abrir a tabela
+         pelo Table Editor do painel Supabase resolveu. Registrado na
+         secao 6 pra quem for rodar as migrations novas do zero.
+
+12.3. Validado de ponta a ponta, com envio real (dominio
+      noreply.vinnisantos.com.br verificado no Resend, nao so o
+      onboarding@resend.dev de teste)
+      Os 4 fluxos testados no navegador com e-mail de verdade chegando
+      numa caixa de entrada real: pedido de reset -> e-mail recebido ->
+      redefinicao -> login com a senha nova; cadastro -> e-mail de
+      verificacao recebido -> confirmacao -> banner some (apos novo
+      login); admin convida profissional -> e-mail de convite recebido
+      -> aceite -> senha definida -> login automatico na propria agenda;
+      agendamento criado ~24h no futuro -> BackgroundService disparou no
+      proprio startup (nao precisou esperar o tick de 15min) -> e-mail de
+      lembrete recebido com horario local correto (confirma o fix do
+      12.2.a) -> reminder_sent_at gravado (sem reenvio).
+      dotnet build/test limpos o tempo todo (57/57 testes, os 49
+      anteriores + 8 novos de EmailTokenServiceTests).
+
+12.4. Dado de teste que ficou no banco (nao removido de proposito, sem
+      problema em manter)
+      Tenant "qa-email-test" (slug), com um admin (e-mail fake,
+      admin-qa-teste@example.com, nunca verificou o proprio e-mail de
+      proposito) e uma profissional aceita via convite
+      (xgamesparanaue157+profissional@gmail.com — endereco com "+" usado
+      so pra nao colidir com a constraint do achado 12.2.c). Um convite
+      antigo pro mesmo tenant, pra
+      xgamesparanaue157@gmail.com sem o "+", ficou "pendente" pra sempre
+      (nunca vai ser aceito, expira sozinho em 7 dias) — exatamente o
+      efeito colateral do bug 12.2.c, deixado como evidencia.

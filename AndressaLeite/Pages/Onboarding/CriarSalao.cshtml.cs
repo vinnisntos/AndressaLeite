@@ -33,13 +33,15 @@ namespace AndressaLeite.Pages.Onboarding
         private readonly ILogger<CriarSalaoModel> _logger;
         private readonly CurrentTenant _currentTenant;
         private readonly IConfiguration _configuration;
+        private readonly IEmailService _emailService;
 
-        public CriarSalaoModel(Supabase.Client supabase, ILogger<CriarSalaoModel> logger, CurrentTenant currentTenant, IConfiguration configuration)
+        public CriarSalaoModel(Supabase.Client supabase, ILogger<CriarSalaoModel> logger, CurrentTenant currentTenant, IConfiguration configuration, IEmailService emailService)
         {
             _supabase = supabase;
             _logger = logger;
             _currentTenant = currentTenant;
             _configuration = configuration;
+            _emailService = emailService;
         }
 
         [BindProperty]
@@ -148,6 +150,12 @@ namespace AndressaLeite.Pages.Onboarding
                 };
                 await _supabase.From<Profile>().Insert(profile);
 
+                // Verificação de e-mail (readme.txt 4.2) — nunca pode
+                // impedir a criação do salão de completar; Resend fora do
+                // ar só loga e segue, o salão já está criado de qualquer
+                // forma.
+                await TrySendVerificationEmailAsync(profile.Id, profile.Email, cleanSlug);
+
                 var rootDomain = _configuration["Tenancy:RootDomain"] ?? "localhost";
                 var scheme = Request.IsHttps ? "https" : "http";
                 var port = Request.Host.Port.HasValue ? $":{Request.Host.Port}" : "";
@@ -177,6 +185,38 @@ namespace AndressaLeite.Pages.Onboarding
                 _logger.LogError(ex, "Falha inesperada no onboarding para slug {Slug}", cleanSlug);
                 ErrorMessage = "Não foi possível criar seu salão agora. Tente novamente em instantes.";
                 return Page();
+            }
+        }
+
+        /// <summary>
+        /// Gera o token de verificação e envia o e-mail — sempre em
+        /// try/catch só-loga (ver comentário no chamador): um salão criado
+        /// com sucesso nunca pode virar erro por causa do Resend.
+        /// </summary>
+        private async Task TrySendVerificationEmailAsync(string profileId, string email, string slug)
+        {
+            try
+            {
+                var (rawToken, tokenHash) = EmailTokenService.GenerateToken();
+                await _supabase.From<Profile>()
+                    .Where(x => x.Id == profileId)
+                    .Set(x => x.ActionTokenHash, tokenHash)
+                    .Set(x => x.ActionTokenType, "email_verification")
+                    .Set(x => x.ActionTokenExpiresAt, DateTime.UtcNow.AddHours(24))
+                    .Update();
+
+                var rootDomain = _configuration["Tenancy:RootDomain"] ?? "localhost";
+                var scheme = Request.IsHttps ? "https" : "http";
+                var port = Request.Host.Port.HasValue ? $":{Request.Host.Port}" : "";
+                var verifyUrl = $"{scheme}://{slug}.{rootDomain}{port}/Auth/VerificarEmail?token={rawToken}";
+
+                var html = $"<p>Confirme seu e-mail no MarcAi clicando no link abaixo (válido por 24 horas):</p>" +
+                    $"<p><a href=\"{System.Net.WebUtility.HtmlEncode(verifyUrl)}\">Confirmar meu e-mail</a></p>";
+                await _emailService.SendEmailAsync(email, "Confirme seu e-mail — MarcAi", html);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Falha ao enviar e-mail de verificação no onboarding para {Email}", email);
             }
         }
 

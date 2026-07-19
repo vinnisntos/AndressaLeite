@@ -118,7 +118,8 @@ namespace AndressaLeite.Pages.Auth
                 new Claim(ClaimTypes.NameIdentifier, profile.Id),
                 new Claim(ClaimTypes.Email, profile.Email ?? Email),
                 new Claim(ClaimTypes.Role, role),
-                new Claim(AuthorizationService.TenantClaimType, profile.TenantId)
+                new Claim(AuthorizationService.TenantClaimType, profile.TenantId),
+                new Claim(AuthorizationService.EmailVerifiedClaimType, profile.EmailVerified.ToString())
             };
 
             var claimsIdentity = new ClaimsIdentity(

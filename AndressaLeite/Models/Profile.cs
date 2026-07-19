@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using AndressaLeite.Services;
 using Postgrest.Models;
 
 namespace AndressaLeite.Models
@@ -56,5 +57,36 @@ namespace AndressaLeite.Models
         [Required]
         [Postgrest.Attributes.Column("tenant_id")]
         public string TenantId { get; set; } = string.Empty;
+
+        // =================================================================
+        // Token de ação (reset de senha OU verificação de e-mail) —
+        // compartilhado entre os dois propósitos, ver migration 0007.
+        // Armazenado como hash SHA-256 (Services/EmailTokenService.cs),
+        // nunca em texto puro.
+        // =================================================================
+
+        [Postgrest.Attributes.Column("action_token_hash")]
+        public string? ActionTokenHash { get; set; }
+
+        /// <summary>"password_reset" ou "email_verification".</summary>
+        [Postgrest.Attributes.Column("action_token_type")]
+        public string? ActionTokenType { get; set; }
+
+        // Setter passa por PostgrestTime.ToTrueUtc — ver comentário
+        // completo em Models/Appointement.cs (readme.txt 12.2.a).
+        private DateTime? _actionTokenExpiresAt;
+        [Postgrest.Attributes.Column("action_token_expires_at")]
+        public DateTime? ActionTokenExpiresAt
+        {
+            get => _actionTokenExpiresAt;
+            set => _actionTokenExpiresAt = PostgrestTime.ToTrueUtc(value);
+        }
+
+        /// <summary>
+        /// Verificação "soft" — não bloqueia login, só permite mostrar um
+        /// aviso pedindo pra confirmar o e-mail (readme.txt 4.2).
+        /// </summary>
+        [Postgrest.Attributes.Column("email_verified")]
+        public bool EmailVerified { get; set; }
     }
 }

@@ -8,7 +8,6 @@ using AndressaLeite.Models;
 using AndressaLeite.Services;
 using System.Security.Claims;
 using System.ComponentModel.DataAnnotations;
-using BCrypt.Net;
 
 namespace AndressaLeite.Pages.Admin
 {
@@ -19,19 +18,26 @@ namespace AndressaLeite.Pages.Admin
         private readonly ILogger<DashAdminModel> _logger;
         private readonly CurrentTenant _currentTenant;
         private readonly IMemoryCache _cache;
+        private readonly IEmailService _emailService;
+        private readonly IConfiguration _configuration;
 
-        public DashAdminModel(Supabase.Client supabase, ILogger<DashAdminModel> logger, CurrentTenant currentTenant, IMemoryCache cache)
+        public DashAdminModel(Supabase.Client supabase, ILogger<DashAdminModel> logger, CurrentTenant currentTenant, IMemoryCache cache, IEmailService emailService, IConfiguration configuration)
         {
             _supabase = supabase;
             _logger = logger;
             _currentTenant = currentTenant;
             _cache = cache;
+            _emailService = emailService;
+            _configuration = configuration;
         }
 
         public decimal EstimatedRevenue { get; set; } = 0.00m;
         public decimal ActualRevenue { get; set; } = 0.00m;
         public List<Profile> ActiveEmployees { get; set; } = new();
         public List<Service> AllServices { get; set; } = new();
+
+        /// <summary>Convites de equipe ainda não aceitos/cancelados/expirados (readme.txt 5.6).</summary>
+        public List<TeamInvite> PendingInvites { get; set; } = new();
 
         // Métricas do dia/mês (Fase 7 do roadmap, readme.txt).
         public int CompletedToday { get; set; }
@@ -82,6 +88,18 @@ namespace AndressaLeite.Pages.Admin
                 .Where(x => x.TenantId == tenantId)
                 .Get();
             AllServices = servicesResponse.Models.OrderBy(s => s.Name).ToList();
+
+            // Convites pendentes (readme.txt 5.6) — filtra usado/cancelado
+            // em memória (mesmo padrão de OR via múltiplas condições já
+            // usado no resto do projeto) e expiração comparando com agora.
+            var invitesResponse = await _supabase.From<TeamInvite>()
+                .Where(x => x.TenantId == tenantId)
+                .Get();
+            var now = DateTime.UtcNow;
+            PendingInvites = invitesResponse.Models
+                .Where(i => i.UsedAt is null && i.CancelledAt is null && i.ExpiresAt > now)
+                .OrderByDescending(i => i.CreatedAt)
+                .ToList();
 
             // Métricas do dia/mês — reaproveita a mesma lista "list" já
             // buscada acima (todos os agendamentos do tenant), sem query
@@ -247,13 +265,27 @@ namespace AndressaLeite.Pages.Admin
 
             try
             {
-                await _supabase.From<Tenant>()
+                // .Set(x => x.Campo, null) quebra no postgrest-csharp 3.5.1
+                // quando LunchStartTime/LunchEndTime ficam null (salão sem
+                // intervalo de almoço — achado da rodada de e-mail
+                // transacional, readme.txt 12.2.b). Busca o tenant
+                // primeiro e faz Update() do objeto completo, em vez de
+                // criar um Tenant novo em memória só com esses 4 campos —
+                // um Update() de objeto parcial mandaria Slug/Name vazios
+                // e apagaria esses dados de verdade.
+                var tenant = await _supabase.From<Tenant>()
                     .Where(x => x.Id == _currentTenant.Id)
-                    .Set(x => x.BusinessOpenTime, openTs.ToString(@"hh\:mm\:ss"))
-                    .Set(x => x.BusinessCloseTime, closeTs.ToString(@"hh\:mm\:ss"))
-                    .Set(x => x.LunchStartTime, lunchStartTs?.ToString(@"hh\:mm\:ss"))
-                    .Set(x => x.LunchEndTime, lunchEndTs?.ToString(@"hh\:mm\:ss"))
-                    .Update();
+                    .Single();
+                if (tenant is null)
+                {
+                    ErrorMessage = "Salão não encontrado.";
+                    return RedirectToPage();
+                }
+                tenant.BusinessOpenTime = openTs.ToString(@"hh\:mm\:ss");
+                tenant.BusinessCloseTime = closeTs.ToString(@"hh\:mm\:ss");
+                tenant.LunchStartTime = lunchStartTs?.ToString(@"hh\:mm\:ss");
+                tenant.LunchEndTime = lunchEndTs?.ToString(@"hh\:mm\:ss");
+                await _supabase.From<Tenant>().Update(tenant);
 
                 // Sem isso, a mudança só valeria depois do TTL do cache do
                 // TenantResolutionMiddleware expirar sozinho (até 60s).
@@ -438,15 +470,15 @@ namespace AndressaLeite.Pages.Admin
         }
 
         /// <summary>
-        /// POST: Adiciona um novo profissional (employee) ao sistema, com
-        /// Email + PasswordHash (BCrypt) para que ele consiga logar pelo
-        /// fluxo normal de autenticação em /Auth/Login.
+        /// POST: convida um novo profissional por e-mail (readme.txt 5.6)
+        /// — substitui o antigo fluxo de criar a conta com senha direto.
+        /// Admin informa nome/e-mail/telefone, a profissional aceita o
+        /// convite e define a própria senha em Pages/Auth/AceitarConvite.cshtml.cs.
         /// </summary>
-        public async Task<IActionResult> OnPostAddEmployeeAsync(
+        public async Task<IActionResult> OnPostInviteEmployeeAsync(
             [FromForm] string EmpName,
             [FromForm] string EmpEmail,
-            [FromForm] string EmpPhone,
-            [FromForm] string EmpPassword)
+            [FromForm] string EmpPhone)
         {
             if (AuthorizationService.GetRole(User) != "admin")
             {
@@ -457,7 +489,6 @@ namespace AndressaLeite.Pages.Admin
                 return Forbid();
             }
 
-            // Validação server-side
             if (string.IsNullOrWhiteSpace(EmpName) || EmpName.Length < 2)
             {
                 ErrorMessage = "Nome do profissional é obrigatório e deve ter pelo menos 2 caracteres.";
@@ -470,82 +501,98 @@ namespace AndressaLeite.Pages.Admin
                 return RedirectToPage();
             }
 
-            if (string.IsNullOrWhiteSpace(EmpPassword) || EmpPassword.Length < 8)
-            {
-                ErrorMessage = "Senha deve ter no mínimo 8 caracteres.";
-                return RedirectToPage();
-            }
-
             var cleanPhone = System.Text.RegularExpressions.Regex.Replace(EmpPhone ?? "", @"[^\d]", "");
-
-            // Validação de telefone (permitir vazio também, já que é ilustrativo)
             if (!string.IsNullOrWhiteSpace(cleanPhone) &&
                 !System.Text.RegularExpressions.Regex.IsMatch(cleanPhone, @"^\+?[1-9]\d{10,14}$"))
             {
                 ErrorMessage = "Telefone inválido. Use DDI + DDD + número (ex: +5515988888888).";
                 return RedirectToPage();
             }
-
-            // Se telefone estiver vazio, usar um padrão
             if (string.IsNullOrWhiteSpace(cleanPhone))
             {
                 cleanPhone = "11999999999"; // Telefone padrão para testes
             }
 
-            // Validação extra de força de senha
-            if (!System.Text.RegularExpressions.Regex.IsMatch(EmpPassword, @"[A-Za-z]") ||
-                !System.Text.RegularExpressions.Regex.IsMatch(EmpPassword, @"\d"))
-            {
-                ErrorMessage = "Senha deve conter pelo menos uma letra e um número.";
-                return RedirectToPage();
-            }
-
             var cleanEmail = EmpEmail.Trim().ToLowerInvariant();
+            var userId = AuthorizationService.TryGetUserId(User, out var adminId) ? adminId.ToString() : string.Empty;
 
             try
             {
-                // Gerar um ID único para o profissional (usando Guid)
-                string profileId = Guid.NewGuid().ToString();
-
-                // Criar perfil no banco com role "employee", já com credenciais
-                // (Email + BCrypt hash) para login no fluxo normal de /Auth/Login.
-                var profileData = new Profile
+                var (rawToken, tokenHash) = EmailTokenService.GenerateToken();
+                var invite = new TeamInvite
                 {
-                    Id = profileId,
+                    Id = Guid.NewGuid().ToString(),
+                    TenantId = _currentTenant.Id!,
+                    Email = cleanEmail,
                     FullName = EmpName.Trim(),
                     Phone = cleanPhone,
-                    Role = "employee",
-                    Email = cleanEmail,
-                    PasswordHash = BCrypt.Net.BCrypt.HashPassword(EmpPassword),
-                    TenantId = _currentTenant.Id!
+                    TokenHash = tokenHash,
+                    ExpiresAt = DateTime.UtcNow.AddDays(7),
+                    CreatedBy = userId
                 };
+                await _supabase.From<TeamInvite>().Insert(invite);
 
-                await _supabase.From<Profile>().Insert(profileData);
+                var rootDomain = _configuration["Tenancy:RootDomain"] ?? "localhost";
+                var scheme = Request.IsHttps ? "https" : "http";
+                var port = Request.Host.Port.HasValue ? $":{Request.Host.Port}" : "";
+                var acceptUrl = $"{scheme}://{_currentTenant.Slug}.{rootDomain}{port}/Auth/AceitarConvite?token={rawToken}";
 
-                SuccessMessage = $"✅ Profissional '{EmpName}' adicionado à equipe com sucesso! " +
-                    $"Email de acesso: {cleanEmail}";
+                var html = $"<p>{System.Net.WebUtility.HtmlEncode(_currentTenant.Name)} te convidou pra fazer parte da equipe no MarcAi.</p>" +
+                    $"<p><a href=\"{System.Net.WebUtility.HtmlEncode(acceptUrl)}\">Clique aqui pra aceitar o convite e definir sua senha</a> " +
+                    $"— o link vale por 7 dias.</p>";
+                await _emailService.SendEmailAsync(cleanEmail, $"Convite para {_currentTenant.Name} — MarcAi", html);
+
+                SuccessMessage = $"✅ Convite enviado para {cleanEmail}.";
                 return RedirectToPage();
             }
             catch (PostgrestException pgex)
             {
-                _logger.LogError(pgex, "Falha ao criar employee {Email}", cleanEmail);
-
-                if (pgex.Message.Contains("23505") || pgex.Message.Contains("duplicate"))
-                {
-                    ErrorMessage = "E-mail já cadastrado no sistema.";
-                }
-                else
-                {
-                    ErrorMessage = "Não foi possível salvar o profissional. Verifique os dados e tente novamente.";
-                }
+                _logger.LogError(pgex, "Falha ao criar convite para {Email}", cleanEmail);
+                ErrorMessage = (pgex.Message.Contains("23505") || pgex.Message.Contains("duplicate"))
+                    ? "Já existe uma conta ou convite pendente para este e-mail."
+                    : "Não foi possível enviar o convite. Verifique os dados e tente novamente.";
                 return RedirectToPage();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Falha inesperada ao criar employee {Email}", cleanEmail);
-                ErrorMessage = "Ocorreu um erro inesperado ao criar o profissional.";
+                _logger.LogError(ex, "Falha inesperada ao criar convite para {Email}", cleanEmail);
+                ErrorMessage = "Ocorreu um erro inesperado ao enviar o convite.";
                 return RedirectToPage();
             }
+        }
+
+        /// <summary>
+        /// POST: cancela um convite ainda não aceito — dá pro admin
+        /// corrigir um convite mandado errado sem esperar os 7 dias de
+        /// expiração natural.
+        /// </summary>
+        public async Task<IActionResult> OnPostCancelInviteAsync(string id)
+        {
+            if (AuthorizationService.GetRole(User) != "admin")
+            {
+                return Forbid();
+            }
+            if (!_currentTenant.IsResolved)
+            {
+                return Forbid();
+            }
+
+            try
+            {
+                await _supabase.From<TeamInvite>()
+                    .Where(x => x.Id == id)
+                    .Where(x => x.TenantId == _currentTenant.Id)
+                    .Set(x => x.CancelledAt, DateTime.UtcNow)
+                    .Update();
+                SuccessMessage = "Convite cancelado.";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Falha ao cancelar convite {Id}", id);
+                ErrorMessage = "Não foi possível cancelar o convite.";
+            }
+
+            return RedirectToPage();
         }
 
         /// <summary>

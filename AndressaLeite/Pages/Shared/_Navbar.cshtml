@@ -1,10 +1,17 @@
 @using System.Security.Claims
 
+@using AndressaLeite.Services
 @{
     // Partial view para navbar role-based
     // Acesso aos claims do usuário autenticado
     var userRole = User?.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
     var isAuthenticated = User?.Identity?.IsAuthenticated ?? false;
+    // Soft verification (readme.txt 4.2) — não bloqueia nada, só mostra o
+    // aviso. Superadmin não tem e-mail verificável nesse sentido (conta
+    // cross-tenant, sem a claim), então não entra nessa checagem.
+    var showEmailVerificationBanner = isAuthenticated
+        && !userRole.Equals("superadmin", StringComparison.OrdinalIgnoreCase)
+        && User!.FindFirstValue(AuthorizationService.EmailVerifiedClaimType) == "False";
 }
 
 <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom sticky-top py-3">
@@ -114,6 +121,16 @@
         </div>
     </div>
 </nav>
+
+@if (showEmailVerificationBanner)
+{
+    <div class="d-flex align-items-center justify-content-center gap-2 py-2 px-3 small" style="background-color: #fbf0df; color: #96601f;">
+        <span>Confirme seu e-mail pra garantir o acesso à sua conta.</span>
+        <form method="post" asp-page="/Perfil" asp-page-handler="ResendVerification" class="d-inline">
+            <button type="submit" class="btn btn-link btn-sm p-0 fw-semibold text-decoration-underline" style="color: #96601f;">Reenviar e-mail</button>
+        </form>
+    </div>
+}
 
 <style>
     .navbar {

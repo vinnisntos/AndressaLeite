@@ -375,11 +375,16 @@ namespace AndressaLeite.Pages.Profissional
                 }
                 else
                 {
-                    await _supabase.From<ProfessionalService>()
-                        .Where(x => x.Id == existing.Id)
-                        .Set(x => x.Price, Price)
-                        .Set(x => x.DurationMinutes, DurationMinutes)
-                        .Update();
+                    // .Set(x => x.Campo, null) quebra no postgrest-csharp
+                    // 3.5.1 quando Price/DurationMinutes voltam pro padrão
+                    // do catálogo (campo em branco = null) — achado da
+                    // rodada de e-mail transacional, readme.txt 12.2.b.
+                    // "existing" já veio completo do fetch acima, então
+                    // Update() do objeto inteiro não perde nenhum outro
+                    // campo.
+                    existing.Price = Price;
+                    existing.DurationMinutes = DurationMinutes;
+                    await _supabase.From<ProfessionalService>().Update(existing);
                 }
 
                 SuccessMessage = $"Preferências salvas para \"{service.Name}\".";
@@ -541,8 +546,9 @@ namespace AndressaLeite.Pages.Profissional
 
             var localStart = startTimeUtc.ToLocalTime();
             var salonName = _currentTenant.Name ?? "o salão";
-            var message = $"Olá {clientName}! Passando para lembrar do seu horário de {serviceName} em {salonName} " +
-                $"no dia {localStart:dd/MM} às {localStart:HH:mm}. Qualquer imprevisto, nos avise! 💛";
+            // Texto compartilhado com o lembrete automático por e-mail —
+            // ver Services/AppointmentReminderMessages.cs.
+            var message = AppointmentReminderMessages.BuildReminderText(clientName, serviceName, salonName, localStart);
 
             return $"https://wa.me/{digitsOnly}?text={Uri.EscapeDataString(message)}";
         }

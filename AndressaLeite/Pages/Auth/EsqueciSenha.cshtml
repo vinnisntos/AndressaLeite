@@ -1,0 +1,41 @@
+@page
+@model AndressaLeite.Pages.Auth.EsqueciSenhaModel
+@{
+    Layout = "/Pages/Shared/_Layout.cshtml";
+}
+
+<div class="my-auto">
+    <div class="mb-4 text-center">
+        <h2 class="fw-bold mb-1 fs-3">Esqueci minha senha</h2>
+        <p class="text-muted fs-6">Informe seu e-mail e mandamos um link pra redefinir a senha.</p>
+    </div>
+
+    @if (!string.IsNullOrEmpty(Model.SuccessMessage))
+    {
+        <div class="alert alert-success card-custom border-0 p-3 mb-4 fs-7" role="alert">@Model.SuccessMessage</div>
+    }
+
+    @if (!ModelState.IsValid)
+    {
+        <div class="alert alert-danger card-custom border-0 p-3 mb-4 fs-7" role="alert">
+            <div asp-validation-summary="All"></div>
+        </div>
+    }
+
+    <div class="card card-custom p-4 bg-white mb-4">
+        <form method="post">
+            <div class="mb-4">
+                <label class="form-label small fw-medium text-secondary">E-mail</label>
+                <input type="email" asp-for="Email" class="form-control form-control-lg rounded-3 fs-6"
+                       placeholder="seu-email@exemplo.com" autocomplete="email" required />
+            </div>
+            <div class="d-grid">
+                <button type="submit" class="btn btn-brand py-3 rounded-3 fs-6">Enviar link de redefinição</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="text-center">
+        <a asp-page="/Auth/Login" class="text-decoration-none small text-secondary">← Voltar para o login</a>
+    </div>
+</div>

@@ -19,6 +19,18 @@ namespace AndressaLeite.Services
         public const string TenantClaimType = "tenant_id";
 
         /// <summary>
+        /// Claim que espelha Profile.EmailVerified no cookie, gravada no
+        /// login/cadastro — permite o banner de "confirme seu e-mail"
+        /// (_Navbar.cshtml) sem uma query extra a cada página. Fica
+        /// desatualizada até o próximo login se o e-mail for verificado no
+        /// meio de uma sessão já aberta (cookie dura até 7 dias, mesmo
+        /// SlidingExpiration do resto do app) — aceito conscientemente,
+        /// mesmo espírito de outras janelas de staleness já existentes no
+        /// projeto (ex.: cache do TenantResolutionMiddleware).
+        /// </summary>
+        public const string EmailVerifiedClaimType = "email_verified";
+
+        /// <summary>
         /// Mapeamento centralizado: dado uma role conhecida, retorna a página
         /// padrão pós-login. Roles desconhecidas caem em "/" (Index).
         /// </summary>

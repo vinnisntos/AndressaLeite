@@ -50,6 +50,9 @@
                 <label class="form-label small fw-medium text-secondary">Sua Senha</label>
                 <input type="password" asp-for="Password" class="form-control form-control-lg rounded-3 fs-6"
                        placeholder="******" autocomplete="current-password" required />
+                <div class="text-end mt-1">
+                    <a asp-page="/Auth/EsqueciSenha" class="text-decoration-none small" style="color: #d4a373;">Esqueci minha senha</a>
+                </div>
             </div>
             <div class="d-grid">
                 <button type="submit" class="btn btn-brand py-3 rounded-3 font-medium fs-6">Entrar no Painel</button>

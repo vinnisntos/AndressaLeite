@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using AndressaLeite.Services;
 using Postgrest.Models;
 
 namespace AndressaLeite.Models
@@ -26,12 +27,33 @@ namespace AndressaLeite.Models
         [Postgrest.Attributes.Column("service_id")]
         public string ServiceId { get; set; } = string.Empty;
 
+        private DateTime _startTime;
+        /// <summary>
+        /// O setter passa por PostgrestTime.ToTrueUtc porque o
+        /// postgrest-csharp devolve timestamptz já convertido pro fuso
+        /// LOCAL da máquina, mas com Kind=Unspecified em vez de Kind=Utc
+        /// — sem essa correção, qualquer .ToLocalTime()/.ToUniversalTime()
+        /// aplicado depois (nas views, no WhatsApp reminder, etc.) fica
+        /// errado pelo offset local (achado da rodada de e-mail
+        /// transacional, readme.txt 12.2.a). Não afeta a escrita: um
+        /// DateTime recém-criado com Kind=Utc passa pela função sem
+        /// nenhuma mudança.
+        /// </summary>
         [Required]
         [Postgrest.Attributes.Column("start_time")]
-        public DateTime StartTime { get; set; }
+        public DateTime StartTime
+        {
+            get => _startTime;
+            set => _startTime = PostgrestTime.ToTrueUtc(value);
+        }
 
+        private DateTime _endTime;
         [Postgrest.Attributes.Column("end_time")]
-        public DateTime EndTime { get; set; }
+        public DateTime EndTime
+        {
+            get => _endTime;
+            set => _endTime = PostgrestTime.ToTrueUtc(value);
+        }
 
         /// <summary>
         /// pending | confirmed | completed | cancelled
@@ -83,5 +105,19 @@ namespace AndressaLeite.Models
         [StringLength(500, ErrorMessage = "Observações com no máximo 500 caracteres.")]
         [Postgrest.Attributes.Column("notes")]
         public string? Notes { get; set; }
+
+        /// <summary>
+        /// Marca quando o lembrete automático por e-mail foi enviado (ver
+        /// Services/AppointmentReminderService.cs) — null = ainda não
+        /// enviado. Garante que o job de polling não reenvie o mesmo
+        /// lembrete a cada tick (readme.txt 5.3).
+        /// </summary>
+        private DateTime? _reminderSentAt;
+        [Postgrest.Attributes.Column("reminder_sent_at")]
+        public DateTime? ReminderSentAt
+        {
+            get => _reminderSentAt;
+            set => _reminderSentAt = PostgrestTime.ToTrueUtc(value);
+        }
     }
 }

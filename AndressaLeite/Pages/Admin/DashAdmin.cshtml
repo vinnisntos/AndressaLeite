@@ -140,8 +140,8 @@
 
 <!-- Controle de Equipe / Profissionais -->
 <div class="card card-custom p-4 bg-white mb-4">
-    <h5 class="fw-bold mb-3 fs-5">Cadastrar Profissional</h5>
-    <form method="post" asp-page-handler="AddEmployee">
+    <h5 class="fw-bold mb-3 fs-5">Convidar Profissional</h5>
+    <form method="post" asp-page-handler="InviteEmployee">
         <div class="mb-3">
             <label class="form-label small text-secondary">Nome da Designer</label>
             <input type="text" name="EmpName" class="form-control rounded-3" placeholder="Ex: Paula Designer" required />
@@ -154,13 +154,31 @@
             <label class="form-label small text-secondary">Celular de Contato</label>
             <input type="tel" name="EmpPhone" class="form-control rounded-3" placeholder="(15) 98888-8888" required />
         </div>
-        <div class="mb-3">
-            <label class="form-label small text-secondary">Senha de Acesso</label>
-            <input type="password" name="EmpPassword" class="form-control rounded-3" placeholder="Senha do painel" required />
-        </div>
-        <button type="submit" class="btn btn-brand btn-sm w-100 py-2 rounded-3">Adicionar à Equipe</button>
+        <div class="form-text small mb-3">A profissional recebe um e-mail com um link pra definir a própria senha.</div>
+        <button type="submit" class="btn btn-brand btn-sm w-100 py-2 rounded-3">Enviar convite</button>
     </form>
 </div>
+
+@if (Model.PendingInvites.Count > 0)
+{
+    <div class="card card-custom p-4 bg-white mb-4">
+        <h5 class="fw-bold mb-3 fs-5">Convites Pendentes</h5>
+        <div class="list-group list-group-flush gap-2">
+            @foreach (var invite in Model.PendingInvites)
+            {
+                <div class="list-group-item d-flex justify-content-between align-items-center px-0 border-0">
+                    <div>
+                        <h6 class="fw-bold mb-0 small">@invite.FullName</h6>
+                        <span class="text-muted" style="font-size: 0.75rem;">@invite.Email &middot; expira em @invite.ExpiresAt.ToLocalTime().ToString("dd/MM")</span>
+                    </div>
+                    <form method="post" asp-page-handler="CancelInvite" asp-route-id="@invite.Id">
+                        <button type="submit" class="btn btn-sm btn-link text-danger text-decoration-none small">Cancelar</button>
+                    </form>
+                </div>
+            }
+        </div>
+    </div>
+}
 
 <div class="card card-custom p-4 bg-white mb-4">
     <h5 class="fw-bold mb-3 fs-5">Profissionais Ativas</h5>

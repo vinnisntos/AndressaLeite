@@ -1,0 +1,53 @@
+@page
+@model AndressaLeite.Pages.Auth.RedefinirSenhaModel
+@{
+    Layout = "/Pages/Shared/_Layout.cshtml";
+}
+
+<div class="my-auto">
+    <div class="mb-4 text-center">
+        <h2 class="fw-bold mb-1 fs-3">Escolher senha nova</h2>
+        <p class="text-muted fs-6">Defina uma senha nova pra sua conta.</p>
+    </div>
+
+    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
+    {
+        <div class="alert alert-danger card-custom border-0 p-3 mb-4 fs-7" role="alert">@Model.ErrorMessage</div>
+    }
+
+    @if (!ModelState.IsValid)
+    {
+        <div class="alert alert-danger card-custom border-0 p-3 mb-4 fs-7" role="alert">
+            <div asp-validation-summary="All"></div>
+        </div>
+    }
+
+    @if (Model.TokenIsValid)
+    {
+        <div class="card card-custom p-4 bg-white mb-4">
+            <form method="post">
+                <input type="hidden" asp-for="Token" />
+                <div class="mb-3">
+                    <label class="form-label small fw-medium text-secondary">Senha nova</label>
+                    <input type="password" asp-for="Password" class="form-control form-control-lg rounded-3 fs-6"
+                           placeholder="Mínimo 8 caracteres" autocomplete="new-password" required />
+                    <div class="form-text small">Use pelo menos 8 caracteres, com letras e números.</div>
+                </div>
+                <div class="mb-4">
+                    <label class="form-label small fw-medium text-secondary">Repita a senha</label>
+                    <input type="password" asp-for="ConfirmPassword" class="form-control form-control-lg rounded-3 fs-6"
+                           placeholder="Confirme sua senha" autocomplete="new-password" required />
+                </div>
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-brand py-3 rounded-3 fs-6">Redefinir senha</button>
+                </div>
+            </form>
+        </div>
+    }
+    else
+    {
+        <div class="text-center">
+            <a asp-page="/Auth/EsqueciSenha" class="btn btn-brand py-3 px-4 rounded-3 fs-6">Pedir um novo link</a>
+        </div>
+    }
+</div>

@@ -14,19 +14,26 @@ namespace AndressaLeite.Pages
     public class PerfilModel : PageModel
     {
         private readonly Supabase.Client _supabase;
+        private readonly IEmailService _emailService;
         private readonly ILogger<PerfilModel> _logger;
         private readonly CurrentTenant _currentTenant;
+        private readonly IConfiguration _configuration;
 
-        public PerfilModel(Supabase.Client supabase, ILogger<PerfilModel> logger, CurrentTenant currentTenant)
+        public PerfilModel(Supabase.Client supabase, IEmailService emailService, ILogger<PerfilModel> logger, CurrentTenant currentTenant, IConfiguration configuration)
         {
             _supabase = supabase;
+            _emailService = emailService;
             _logger = logger;
             _currentTenant = currentTenant;
+            _configuration = configuration;
         }
 
         // Dados do Perfil (read-only do cliente)
         public string? Email { get; set; }
         public string? Role { get; set; }
+
+        /// <summary>Soft verification (readme.txt 4.2) — não bloqueia login, só controla o banner de aviso.</summary>
+        public bool EmailVerified { get; set; }
 
         // Dados editáveis
         [BindProperty]
@@ -98,6 +105,7 @@ namespace AndressaLeite.Pages
                 // Popula os campos editáveis
                 FullName = profile.FullName;
                 Phone = profile.Phone;
+                EmailVerified = profile.EmailVerified;
             }
             catch (Exception ex)
             {
@@ -225,6 +233,62 @@ namespace AndressaLeite.Pages
             }
 
             return Page();
+        }
+
+        /// <summary>
+        /// POST: reenvia o e-mail de verificação (readme.txt 4.2) — usado
+        /// pelo link "reenviar" do banner de e-mail não verificado
+        /// (_Layout.cshtml). Gera um token novo a cada chamada (invalida
+        /// qualquer um pendente, mesmo raciocínio do reset de senha).
+        /// </summary>
+        public async Task<IActionResult> OnPostResendVerificationAsync()
+        {
+            if (!AuthorizationService.TryGetUserId(User, out var userId))
+            {
+                return Forbid();
+            }
+            if (!_currentTenant.IsResolved)
+            {
+                return Forbid();
+            }
+
+            var userIdStr = userId.ToString();
+            try
+            {
+                var profile = await _supabase.From<Profile>()
+                    .Where(x => x.Id == userIdStr)
+                    .Where(x => x.TenantId == _currentTenant.Id)
+                    .Single();
+
+                if (profile is not null && !profile.EmailVerified)
+                {
+                    var (rawToken, tokenHash) = EmailTokenService.GenerateToken();
+                    await _supabase.From<Profile>()
+                        .Where(x => x.Id == profile.Id)
+                        .Set(x => x.ActionTokenHash, tokenHash)
+                        .Set(x => x.ActionTokenType, "email_verification")
+                        .Set(x => x.ActionTokenExpiresAt, DateTime.UtcNow.AddHours(24))
+                        .Update();
+
+                    var rootDomain = _configuration["Tenancy:RootDomain"] ?? "localhost";
+                    var scheme = Request.IsHttps ? "https" : "http";
+                    var port = Request.Host.Port.HasValue ? $":{Request.Host.Port}" : "";
+                    var verifyUrl = $"{scheme}://{_currentTenant.Slug}.{rootDomain}{port}/Auth/VerificarEmail?token={rawToken}";
+
+                    var html = $"<p>Confirme seu e-mail no MarcAi clicando no link abaixo (válido por 24 horas):</p>" +
+                        $"<p><a href=\"{System.Net.WebUtility.HtmlEncode(verifyUrl)}\">Confirmar meu e-mail</a></p>";
+                    await _emailService.SendEmailAsync(profile.Email, "Confirme seu e-mail — MarcAi", html);
+                }
+
+                SuccessMessage = "Reenviamos o link de verificação para o seu e-mail.";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Falha ao reenviar verificação de e-mail para {UserId}", userIdStr);
+                ErrorMessage = "Não foi possível reenviar o e-mail agora. Tente novamente.";
+            }
+
+            return RedirectToPage();
         }
 
         /// <summary>

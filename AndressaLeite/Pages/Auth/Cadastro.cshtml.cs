@@ -17,11 +17,15 @@ namespace AndressaLeite.Pages.Auth
     {
         private readonly ILogger<CadastroModel> _logger;
         private readonly CurrentTenant _currentTenant;
+        private readonly IEmailService _emailService;
+        private readonly IConfiguration _configuration;
 
-        public CadastroModel(ILogger<CadastroModel> logger, CurrentTenant currentTenant)
+        public CadastroModel(ILogger<CadastroModel> logger, CurrentTenant currentTenant, IEmailService emailService, IConfiguration configuration)
         {
             _logger = logger;
             _currentTenant = currentTenant;
+            _emailService = emailService;
+            _configuration = configuration;
         }
 
         [BindProperty]
@@ -112,13 +116,19 @@ namespace AndressaLeite.Pages.Auth
                 // 3. Executa o insert na tabela pública
                 await supabase.From<AndressaLeite.Models.Profile>().Insert(profile);
 
+                // Verificação de e-mail (readme.txt 4.2) — nunca pode
+                // impedir o cadastro de completar; Resend fora do ar só
+                // loga e segue, o cadastro já está feito de qualquer forma.
+                await TrySendVerificationEmailAsync(supabase, newUserId, profile.Email);
+
                 // 4. Cria a identidade de Cookies local do .NET
                 var claims = new List<Claim>
                 {
                     new Claim(ClaimTypes.NameIdentifier, newUserId),
                     new Claim(ClaimTypes.Email, Email.Trim().ToLowerInvariant()),
                     new Claim(ClaimTypes.Role, "client"),
-                    new Claim(AuthorizationService.TenantClaimType, _currentTenant.Id!)
+                    new Claim(AuthorizationService.TenantClaimType, _currentTenant.Id!),
+                    new Claim(AuthorizationService.EmailVerifiedClaimType, "False")
                 };
 
                 var claimsIdentity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
@@ -145,6 +155,38 @@ namespace AndressaLeite.Pages.Auth
                     ? "Este e-mail já está cadastrado."
                     : "Não foi possível concluir o cadastro no momento. Tente novamente em instantes.";
                 return Page();
+            }
+        }
+
+        /// <summary>
+        /// Gera o token de verificação e envia o e-mail — sempre em
+        /// try/catch só-loga (ver comentário no chamador): um cadastro
+        /// bem-sucedido nunca pode virar erro por causa do Resend.
+        /// </summary>
+        private async Task TrySendVerificationEmailAsync(Supabase.Client supabase, string profileId, string email)
+        {
+            try
+            {
+                var (rawToken, tokenHash) = EmailTokenService.GenerateToken();
+                await supabase.From<AndressaLeite.Models.Profile>()
+                    .Where(x => x.Id == profileId)
+                    .Set(x => x.ActionTokenHash, tokenHash)
+                    .Set(x => x.ActionTokenType, "email_verification")
+                    .Set(x => x.ActionTokenExpiresAt, DateTime.UtcNow.AddHours(24))
+                    .Update();
+
+                var rootDomain = _configuration["Tenancy:RootDomain"] ?? "localhost";
+                var scheme = Request.IsHttps ? "https" : "http";
+                var port = Request.Host.Port.HasValue ? $":{Request.Host.Port}" : "";
+                var verifyUrl = $"{scheme}://{_currentTenant.Slug}.{rootDomain}{port}/Auth/VerificarEmail?token={rawToken}";
+
+                var html = $"<p>Confirme seu e-mail no MarcAi clicando no link abaixo (válido por 24 horas):</p>" +
+                    $"<p><a href=\"{System.Net.WebUtility.HtmlEncode(verifyUrl)}\">Confirmar meu e-mail</a></p>";
+                await _emailService.SendEmailAsync(email, "Confirme seu e-mail — MarcAi", html);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Falha ao enviar e-mail de verificação no cadastro para {Email}", email);
             }
         }
     }

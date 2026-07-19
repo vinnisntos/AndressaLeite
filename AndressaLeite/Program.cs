@@ -25,6 +25,16 @@ builder.Services.AddMemoryCache();
 builder.Services.AddScoped<CurrentTenant>();
 builder.Services.AddScoped<AppointmentBookingService>();
 
+// 1c. E-MAIL TRANSACIONAL (Resend, readme.txt secao 9.1) — desbloqueia
+// esqueci-minha-senha, verificacao de e-mail, convite de equipe e
+// lembrete automatico de agendamento (secoes 4.1/4.2/5.3/5.6).
+builder.Services.AddHttpClient<IEmailService, ResendEmailService>();
+
+// Job de lembrete automatico de agendamento (secao 5.3) — primeira
+// infraestrutura de job agendado do projeto. Ver Services/
+// AppointmentReminderService.cs pra limitacoes assumidas (single-instance).
+builder.Services.AddHostedService<AppointmentReminderService>();
+
 // 2. SEGURANÇA E AUTENTICAÇÃO
 builder.Services
     .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
@@ -128,6 +138,22 @@ builder.Services.AddRateLimiter(options =>
         {
             PermitLimit = 5,
             Window = TimeSpan.FromHours(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        });
+    });
+
+    // Política "password-reset" — pedido de "esqueci minha senha" (secao
+    // 4.1). Mais apertada que "signup" (3/hora) porque este endpoint nao
+    // tem nenhum custo de criacao de conta na frente pra desestimular
+    // abuso — e puro vetor de enumeracao de e-mail/spam de envio.
+    options.AddPolicy("password-reset", httpContext =>
+    {
+        var ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 3,
+            Window = TimeSpan.FromMinutes(15),
             QueueLimit = 0,
             AutoReplenishment = true
         });

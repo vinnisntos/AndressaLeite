@@ -181,11 +181,13 @@ namespace AndressaLeite.Pages.SuperAdmin
 
             try
             {
-                await _supabase.From<PlatformAdmin>()
-                    .Where(x => x.Id == admin.Id)
-                    .Set(x => x.TotpEnabled, false)
-                    .Set(x => x.TotpSecret, (string?)null)
-                    .Update();
+                // .Set(x => x.Campo, null) quebra no postgrest-csharp 3.5.1
+                // (achado da rodada de e-mail transacional, readme.txt
+                // 12.2.b) — Update() do objeto completo funciona
+                // normalmente pra limpar uma coluna nullable.
+                admin.TotpEnabled = false;
+                admin.TotpSecret = null;
+                await _supabase.From<PlatformAdmin>().Update(admin);
                 SuccessMessage = "2FA desativado.";
             }
             catch (Exception ex)

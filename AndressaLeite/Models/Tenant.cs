@@ -1,3 +1,4 @@
+using AndressaLeite.Services;
 using Postgrest.Models;
 
 namespace AndressaLeite.Models
@@ -17,8 +18,15 @@ namespace AndressaLeite.Models
         [Postgrest.Attributes.Column("is_active")]
         public bool IsActive { get; set; } = true;
 
+        // Setter passa por PostgrestTime.ToTrueUtc — ver comentário
+        // completo em Models/Appointement.cs (readme.txt 12.2.a).
+        private DateTime _createdAt;
         [Postgrest.Attributes.Column("created_at")]
-        public DateTime CreatedAt { get; set; }
+        public DateTime CreatedAt
+        {
+            get => _createdAt;
+            set => _createdAt = PostgrestTime.ToTrueUtc(value);
+        }
 
         // Horário de funcionamento do salão. Guardado como string
         // ("HH:mm:ss", igual ao formato que o Postgres devolve pra coluna

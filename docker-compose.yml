@@ -1,0 +1,41 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: marcai-app
+    restart: unless-stopped
+    environment:
+      Supabase__Url: ${SUPABASE_URL}
+      Supabase__SecretKey: ${SUPABASE_SECRET_KEY}
+      Tenancy__RootDomain: ${ROOT_DOMAIN}
+      Resend__ApiKey: ${RESEND_API_KEY}
+      Resend__FromAddress: ${RESEND_FROM_ADDRESS}
+      ASPNETCORE_ENVIRONMENT: Production
+    expose:
+      - "8080"
+
+  caddy:
+    build:
+      context: .
+      dockerfile: Dockerfile.caddy
+    container_name: marcai-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      ACME_EMAIL: ${ACME_EMAIL}
+      ROOT_DOMAIN: ${ROOT_DOMAIN}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - app
+
+volumes:
+  caddy_data:
+  caddy_config:
