@@ -1,0 +1,14 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$ROOT_DOMAIN}, *.{$ROOT_DOMAIN} {
+	tls {
+		dns route53 {
+			max_retries 10
+			region {$AWS_REGION}
+		}
+	}
+
+	reverse_proxy app:8080
+}
