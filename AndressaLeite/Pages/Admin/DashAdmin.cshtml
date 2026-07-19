@@ -4,9 +4,18 @@
     Layout = "/Pages/Shared/_Layout.cshtml";
 }
 
-<div class="mb-4">
-    <h3 class="fw-bold fs-4">Painel de Controle</h3>
-    <p class="text-muted small">Gestão Geral do @CurrentTenant.Name</p>
+<div class="mb-4 d-flex justify-content-between align-items-start">
+    <div>
+        <h3 class="fw-bold fs-4">Painel de Controle</h3>
+        <p class="text-muted small">Gestão Geral do @CurrentTenant.Name</p>
+    </div>
+    <a asp-page="/Admin/Assinatura" class="btn btn-sm btn-outline-secondary rounded-3">
+        @{
+            var (subLabel, subCss) = AndressaLeite.Services.SubscriptionStatusFormatter.Format(Model.SubscriptionStatus);
+        }
+        <span class="badge @subCss">@subLabel</span>
+        Assinatura
+    </a>
 </div>
 
 <!-- Mensagens de Sucesso/Erro -->

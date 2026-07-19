@@ -28,6 +28,9 @@ namespace AndressaLeite.Pages.SuperAdmin
 
         public List<Tenant> Tenants { get; set; } = new();
 
+        /// <summary>Status de billing por tenant.Id (readme.txt 4.9/9.2) — tenant sem linha ainda não aparece aqui.</summary>
+        public Dictionary<string, string> SubscriptionStatusByTenant { get; set; } = new();
+
         [TempData] public string? SuccessMessage { get; set; }
         [TempData] public string? ErrorMessage { get; set; }
 
@@ -35,8 +38,13 @@ namespace AndressaLeite.Pages.SuperAdmin
         {
             var response = await _supabase.From<Tenant>().Get();
             Tenants = response.Models.OrderBy(t => t.Name).ToList();
+
+            var subscriptionsResponse = await _supabase.From<TenantSubscription>().Get();
+            SubscriptionStatusByTenant = subscriptionsResponse.Models.ToDictionary(s => s.TenantId, s => s.Status);
+
             return Page();
         }
+
 
         /// <summary>
         /// POST: ativa/desativa a licença de um salão (tenants.is_active).

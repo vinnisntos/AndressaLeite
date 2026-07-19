@@ -1,0 +1,87 @@
+@page
+@model AndressaLeite.Pages.Admin.AssinaturaModel
+@{
+    Layout = "/Pages/Shared/_Layout.cshtml";
+}
+
+<div class="mb-4">
+    <a asp-page="/Admin/DashAdmin" class="text-decoration-none text-secondary small">← Voltar</a>
+    <h3 class="fw-bold fs-4 mt-2">Assinatura</h3>
+</div>
+
+@if (!string.IsNullOrEmpty(Model.ErrorMessage))
+{
+    <div class="alert alert-danger card-custom border-0 p-3 mb-4 small">@Model.ErrorMessage</div>
+}
+
+@if (!ModelState.IsValid)
+{
+    <div class="alert alert-danger card-custom border-0 p-3 mb-4 small">
+        <div asp-validation-summary="All"></div>
+    </div>
+}
+
+<div class="card card-custom p-4 bg-white mb-4">
+    @switch (Model.Status)
+    {
+        case "trial":
+            <span class="badge bg-info mb-2">Período de teste</span>
+            <p class="text-muted small mb-0">
+                Restam <strong>@Model.TrialDaysLeft dia(s)</strong> de teste grátis. Depois disso, a cobrança de
+                <strong>R$ @Model.PlanPrice</strong>/mês começa automaticamente assim que você configurar o pagamento.
+            </p>
+            break;
+        case "pending_payment":
+            <span class="badge bg-warning text-dark mb-2">Aguardando confirmação</span>
+            <p class="text-muted small mb-0">Recebemos o início da assinatura — assim que o pagamento for confirmado pelo Asaas, o status muda aqui automaticamente.</p>
+            break;
+        case "active":
+            <span class="badge bg-success mb-2">Ativa</span>
+            <p class="text-muted small mb-0">
+                Assinatura em dia — R$ @Model.PlanPrice/mês.
+                @if (Model.NextDueDate is not null)
+                {
+                    <text>Próxima cobrança perto de @Model.NextDueDate.Value.ToLocalTime().ToString("dd/MM/yyyy").</text>
+                }
+            </p>
+            break;
+        case "overdue":
+            <span class="badge bg-danger mb-2">Pagamento atrasado</span>
+            <p class="text-muted small mb-0">
+                Sua última cobrança não foi confirmada. Você tem <strong>@Model.GraceDaysLeft dia(s)</strong> antes do
+                acesso ser suspenso automaticamente.
+            </p>
+            break;
+        case "suspended":
+            <span class="badge bg-dark mb-2">Suspensa</span>
+            <p class="text-muted small mb-0">O acesso deste salão foi suspenso por falta de pagamento. Assine novamente abaixo pra reativar.</p>
+            break;
+        case "cancelled":
+            <span class="badge bg-secondary mb-2">Cancelada</span>
+            <p class="text-muted small mb-0">Sua assinatura foi cancelada.</p>
+            break;
+    }
+</div>
+
+@if (Model.ShowSubscribeForm)
+{
+    <div class="card card-custom p-4 bg-white mb-4">
+        <h5 class="fw-bold mb-3 fs-5">@(Model.Status == "trial" ? "Configurar pagamento" : "Assinar agora")</h5>
+        <form method="post" asp-page-handler="Assinar">
+            <div class="mb-3">
+                <label class="form-label small text-secondary">Nome do responsável</label>
+                <input type="text" asp-for="OwnerName" class="form-control rounded-3" required />
+            </div>
+            <div class="mb-3">
+                <label class="form-label small text-secondary">CPF ou CNPJ</label>
+                <input type="text" asp-for="CpfCnpj" class="form-control rounded-3" placeholder="Só números" required />
+            </div>
+            <div class="mb-3">
+                <label class="form-label small text-secondary">Celular</label>
+                <input type="tel" asp-for="Phone" class="form-control rounded-3" placeholder="5515999999999" required />
+            </div>
+            <div class="form-text small mb-3">Você escolhe PIX ou Cartão de Crédito na próxima tela, direto com o Asaas — nunca pedimos dado de cartão aqui.</div>
+            <button type="submit" class="btn btn-brand py-3 rounded-3 fs-6 w-100">Continuar pro pagamento</button>
+        </form>
+    </div>
+}

@@ -47,6 +47,11 @@
                             {
                                 <span class="badge bg-secondary ms-1">Suspenso</span>
                             }
+                            @{
+                                var subStatus = Model.SubscriptionStatusByTenant.TryGetValue(tenant.Id, out var s) ? s : null;
+                                var (subLabel, subCss) = AndressaLeite.Services.SubscriptionStatusFormatter.Format(subStatus);
+                            }
+                            <span class="badge @subCss ms-1">@subLabel</span>
                         </h6>
                         <span class="text-muted" style="font-size: 0.75rem;">@tenant.Slug</span>
                     </div>

@@ -35,6 +35,12 @@ builder.Services.AddHttpClient<IEmailService, ResendEmailService>();
 // AppointmentReminderService.cs pra limitacoes assumidas (single-instance).
 builder.Services.AddHostedService<AppointmentReminderService>();
 
+// 1d. BILLING (Asaas, readme.txt secao 4.9/9.2) — checkout hospedado de
+// assinatura recorrente (nunca vejo dado de cartao) + job de suspensao
+// por trial vencido/atraso alem da tolerancia.
+builder.Services.AddHttpClient<IAsaasService, AsaasService>();
+builder.Services.AddHostedService<TenantSuspensionService>();
+
 // 2. SEGURANÇA E AUTENTICAÇÃO
 builder.Services
     .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
@@ -158,6 +164,22 @@ builder.Services.AddRateLimiter(options =>
             AutoReplenishment = true
         });
     });
+
+    // Política "asaas-webhook" — mais generosa que as outras (a validação
+    // do header asaas-access-token contra Asaas:WebhookToken é a defesa
+    // primária aqui; isto é só defesa em profundidade contra volume
+    // anormal, não deve barrar entregas legítimas da Asaas).
+    options.AddPolicy("asaas-webhook", httpContext =>
+    {
+        var ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 60,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        });
+    });
 });
 
 // 4. CONVENÇÕES DE ROTAS
@@ -171,6 +193,11 @@ builder.Services.AddRazorPages(options =>
     options.Conventions.AllowAnonymousToPage("/Index");
     options.Conventions.AllowAnonymousToFolder("/Auth");
     options.Conventions.AllowAnonymousToFolder("/Onboarding");
+    // Webhook do Asaas (readme.txt 4.9/9.2) — a Asaas chama isso de fora,
+    // sem cookie de sessão nenhum. Autenticado por um header
+    // (asaas-access-token) validado manualmente dentro do handler, não
+    // pelo esquema de cookie do app.
+    options.Conventions.AllowAnonymousToFolder("/Webhooks");
     // Login do superadmin precisa ser acessível sem estar autenticado —
     // AllowAnonymousToPage tem prioridade sobre o AuthorizeFolder acima
     // pra essa página específica (convenção padrão do Razor Pages).
@@ -259,6 +286,22 @@ app.Use(async (ctx, next) =>
         {
             await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             ctx.Response.Redirect("/Auth/Login");
+            return;
+        }
+
+        // Billing (readme.txt 4.9/9.2): sem isto, um admin/profissional/
+        // cliente JÁ logado continuava com acesso total mesmo se o tenant
+        // fosse suspenso (por atraso de pagamento ou toggle manual do
+        // superadmin) no meio da sessão — só as páginas anônimas (Login,
+        // Cadastro, etc.) checavam IsActive antes disso. Não desloga
+        // (mantém a sessão), só redireciona pro Index, que já sabe
+        // renderizar o estado "suspended" — mesmo comportamento que um
+        // visitante anônimo já tinha.
+        if (currentTenant.IsResolved && !currentTenant.IsActive &&
+            !ctx.Request.Path.StartsWithSegments("/Index", StringComparison.OrdinalIgnoreCase) &&
+            ctx.Request.Path != "/")
+        {
+            ctx.Response.Redirect("/Index");
             return;
         }
     }

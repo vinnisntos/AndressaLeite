@@ -39,6 +39,9 @@ namespace AndressaLeite.Pages.Admin
         /// <summary>Convites de equipe ainda não aceitos/cancelados/expirados (readme.txt 5.6).</summary>
         public List<TeamInvite> PendingInvites { get; set; } = new();
 
+        /// <summary>Status de billing do salão (readme.txt 4.9/9.2) — null se ainda não tem linha em tenant_subscriptions.</summary>
+        public string? SubscriptionStatus { get; set; }
+
         // Métricas do dia/mês (Fase 7 do roadmap, readme.txt).
         public int CompletedToday { get; set; }
         public decimal EstimatedRevenueToday { get; set; }
@@ -72,6 +75,11 @@ namespace AndressaLeite.Pages.Admin
                 .Where(x => x.TenantId == tenantId)
                 .Get();
             ActiveEmployees = employeesResponse.Models;
+
+            var subscription = await _supabase.From<TenantSubscription>()
+                .Where(x => x.TenantId == tenantId)
+                .Single();
+            SubscriptionStatus = subscription?.Status;
 
             // Antes buscava TODOS os agendamentos de TODOS os tenants sem
             // nenhum filtro — era o vazamento cross-tenant mais crítico do

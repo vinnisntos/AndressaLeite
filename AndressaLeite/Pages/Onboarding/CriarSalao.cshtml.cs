@@ -150,6 +150,26 @@ namespace AndressaLeite.Pages.Onboarding
                 };
                 await _supabase.From<Profile>().Insert(profile);
 
+                // Billing (readme.txt 4.9/9.2): trial de 14 dias a partir
+                // de agora — nunca pode impedir a criação do salão de
+                // completar, mesmo raciocínio do e-mail de verificação
+                // logo abaixo.
+                try
+                {
+                    var subscription = new TenantSubscription
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        TenantId = tenant.Id,
+                        Status = "trial",
+                        TrialEndsAt = DateTime.UtcNow.AddDays(14)
+                    };
+                    await _supabase.From<TenantSubscription>().Insert(subscription);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Falha ao criar assinatura trial pro tenant {TenantId}", tenant.Id);
+                }
+
                 // Verificação de e-mail (readme.txt 4.2) — nunca pode
                 // impedir a criação do salão de completar; Resend fora do
                 // ar só loga e segue, o salão já está criado de qualquer

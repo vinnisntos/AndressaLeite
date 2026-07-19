@@ -11,6 +11,10 @@ services:
       Tenancy__RootDomain: ${ROOT_DOMAIN}
       Resend__ApiKey: ${RESEND_API_KEY}
       Resend__FromAddress: ${RESEND_FROM_ADDRESS}
+      Asaas__ApiKey: ${ASAAS_API_KEY}
+      Asaas__BaseUrl: ${ASAAS_BASE_URL}
+      Asaas__CheckoutBaseUrl: ${ASAAS_CHECKOUT_BASE_URL}
+      Asaas__WebhookToken: ${ASAAS_WEBHOOK_TOKEN}
       ASPNETCORE_ENVIRONMENT: Production
     expose:
       - "8080"
