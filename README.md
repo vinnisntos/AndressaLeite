@@ -54,9 +54,10 @@ O MarcAi cobre o fluxo real de operacao de um salao de estetica: cliente escolhe
 - Toggle de historico dos proprios atendimentos, com o mesmo padrao de paginacao do cliente.
 
 ### Para a dona do salao (admin)
-- Gestao de equipe (cadastro/remocao de profissionais) e catalogo de servicos (criar/ativar/desativar/remover).
+- Gestao de equipe: convite por e-mail (a profissional define a propria senha ao aceitar, sem senha provisoria) e catalogo de servicos (criar/ativar/desativar/remover).
 - Configuracao do **horario de funcionamento e do almoco**, por salao — sem precisar de deploy pra mudar.
 - **Dashboard de metricas**: atendimentos concluidos hoje, receita esperada do dia, detalhamento de receita por forma de pagamento (mes atual) e painel de observacoes recentes dos atendimentos.
+- **Assinatura da plataforma** (`/Admin/Assinatura`): trial de 14 dias, assina via checkout hospedado do Asaas (PIX ou Cartao), acompanha status (trial / ativa / atrasada / suspensa) direto no dashboard.
 - Tambem atende como "profissional premium": agenda propria, agendamento manual e "Meus Servicos" — sem duplicar telas.
 
 ### Para o dono da plataforma (superadmin)
@@ -101,9 +102,11 @@ flowchart LR
 | Autenticacao | Cookie proprio + **BCrypt** (nao usa Supabase Auth/Gotrue) |
 | 2FA | **TOTP (RFC 6238)** implementado do zero, sem pacote externo pro algoritmo |
 | QR Code | **QRCoder** (renderer 100% C#, sem `System.Drawing.Common` em runtime) |
-| Testes | **xUnit** (49 testes) |
+| E-mail transacional | **Resend** (esqueci senha, verificacao, convite de equipe, lembrete automatico) |
+| Billing | **Asaas** (checkout hospedado — PIX/Cartao, sem dado de cartao passar pelo backend) |
+| Testes | **xUnit** (57 testes) |
 | CI | **GitHub Actions** (`dotnet build` + `dotnet test` em todo push/PR) |
-| Deploy | **Docker** multi-estagio (build com SDK, runtime com `aspnet`, usuario nao-root) |
+| Deploy | **Docker Compose** (app + Caddy com TLS wildcard automatico via Route53 DNS-01) |
 
 ## 🚀 Como rodar localmente
 
@@ -121,8 +124,12 @@ supabase/migrations/0003_agenda_enriquecida.sql
 supabase/migrations/0004_platform_admins.sql
 supabase/migrations/0005_superadmin_security.sql
 supabase/migrations/0006_cancellation_trigger_and_overlap_constraint.sql
+supabase/migrations/0007_email_action_tokens.sql
+supabase/migrations/0008_team_invites.sql
+supabase/migrations/0009_drop_legacy_global_email_constraint.sql
+supabase/migrations/0010_tenant_subscriptions.sql
 ```
-Todas sao idempotentes (podem rodar de novo sem erro). A `0002` semeia o tenant `studio-bella`; a `0004` semeia a conta de superadmin; a `0006` exige a extensao `btree_gist` (a propria migration ja cria).
+Todas sao idempotentes (podem rodar de novo sem erro). A `0002` semeia o tenant `studio-bella`; a `0004` semeia a conta de superadmin; a `0006` exige a extensao `btree_gist` (a propria migration ja cria); `0007`-`0009` sao da rodada de e-mail transacional; `0010` cria a tabela de assinaturas.
 
 **3. Suba a aplicacao:**
 ```bash
@@ -139,19 +146,16 @@ dotnet run
 
 > Navegadores modernos resolvem `*.localhost` pra `127.0.0.1` nativamente — nao precisa editar `hosts`. Use o CTA "Criar meu salao" na home da plataforma pra testar com um segundo tenant.
 
-## 🐳 Deploy com Docker
+## 🐳 Deploy com Docker Compose
 
 ```bash
-docker build -t marcai:latest .
-
-docker run -p 8080:8080 \
-  -e Supabase__Url="https://SEU-PROJETO.supabase.co" \
-  -e Supabase__SecretKey="sb_secret_..." \
-  -e Tenancy__RootDomain="suaapp.com" \
-  marcai:latest
+cp .env.example .env
+# editar .env: Supabase, dominio, Resend, Asaas, ACME_EMAIL
+docker compose up -d --build
+docker compose logs -f caddy   # acompanhar emissao do certificado TLS
 ```
 
-Build multi-estagio (SDK só pra compilar, runtime `aspnet` puro), container roda como usuario nao-root, escuta em `8080`. Reverse proxy/TLS wildcard e DNS wildcard ficam fora do container, na infraestrutura de deploy.
+`docker-compose.yml` orquestra dois containers: `app` (Dockerfile multi-estagio, roda como usuario nao-root, escuta em `8080` interno) e `caddy` (Dockerfile.caddy, builda o Caddy com o plugin `caddy-dns/route53` pra emitir certificado **wildcard** via desafio DNS-01 — o unico jeito de cobrir `*.suaapp.com`, ja que HTTP-01 nao cobre wildcard). Passo a passo completo de infraestrutura (IAM Role, Elastic IP, Security Group, DNS) em [`docs/DEPLOY_AWS.md`](./docs/DEPLOY_AWS.md), incluindo o caso de dominio registrado fora da Route53 (ex. Registro.br) via delegacao de subdominio.
 
 ## 🧪 Testes e CI
 
@@ -159,9 +163,10 @@ Build multi-estagio (SDK só pra compilar, runtime `aspnet` puro), container rod
 dotnet test AndressaLeite.Tests
 ```
 
-49 testes cobrindo:
+57 testes cobrindo:
 - **`TotpService`**: os 5 vetores oficiais do RFC 6238 (Appendix B), rejeicao de codigo invalido/fora da janela, round-trip de Base32.
 - **`AuthorizationService`**: protecao contra open-redirect, resolucao de landing page por papel, leitura de claims (`tenant_id` incluso).
+- **`EmailTokenService`**: geracao/hash/expiracao de token de acao por e-mail (reset de senha, verificacao, convite).
 
 Todo push/PR pra `main` roda `dotnet build` + `dotnet test` via GitHub Actions.
 
@@ -169,34 +174,40 @@ Todo push/PR pra `main` roda `dotnet build` + `dotnet test` via GitHub Actions.
 
 ```
 AndressaLeite/
-├── Models/            Tenant, Profile, Appointement, Service, ProfessionalService, PlatformAdmin...
+├── Models/            Tenant, Profile, Appointement, Service, ProfessionalService, TeamInvite, TenantSubscription, PlatformAdmin...
 ├── Pages/
 │   ├── Onboarding/     Criacao self-service de novo salao
-│   ├── Auth/           Cadastro / Login / Logout (por tenant)
+│   ├── Auth/           Cadastro / Login / Logout / esqueci senha / verificacao de e-mail / aceitar convite (por tenant)
 │   ├── Cliente/        Agendamento e historico do cliente
 │   ├── Profissional/   Agenda, conclusao, "Meus Servicos", agendamento manual
-│   ├── Admin/          Gestao do salao + dashboard de metricas
-│   └── SuperAdmin/     Painel cross-tenant + 2FA
-├── Services/           CurrentTenant, TenantResolutionMiddleware, AppointmentBookingService, TotpService...
+│   ├── Admin/          Gestao do salao, dashboard de metricas, assinatura (Asaas)
+│   ├── SuperAdmin/     Painel cross-tenant + 2FA
+│   └── Webhooks/       Webhook do Asaas (eventos de pagamento)
+├── Services/           CurrentTenant, TenantResolutionMiddleware, AppointmentBookingService, TotpService, ResendEmailService, AsaasService, AppointmentReminderService, TenantSuspensionService...
 └── Program.cs
 
-AndressaLeite.Tests/    Testes xUnit (TotpService, AuthorizationService)
-supabase/migrations/    Schema incremental do Postgres (0001 a 0006)
-Dockerfile              Build multi-estagio pra deploy
+AndressaLeite.Tests/    Testes xUnit (TotpService, AuthorizationService, EmailTokenService)
+supabase/migrations/    Schema incremental do Postgres (0001 a 0010)
+Dockerfile              Build multi-estagio da aplicacao
+Dockerfile.caddy        Build do Caddy com plugin de DNS da Route53 (certificado TLS wildcard)
+docker-compose.yml      Orquestra app + Caddy
+docs/DEPLOY_AWS.md      Passo a passo de deploy em EC2
 ```
 
 ## 🗺️ Status e roadmap
 
-O roadmap completo da **"Agenda Enriquecida"** (horario dinamico, preco por profissional, agendamento manual, conclusao enriquecida, admin premium, dashboard de metricas, lembrete via WhatsApp) esta **100% implementado**, junto com multi-tenancy, superadmin com 2FA, testes automatizados, CI e Dockerfile.
+O roadmap completo da **"Agenda Enriquecida"** (horario dinamico, preco por profissional, agendamento manual, conclusao enriquecida, admin premium, dashboard de metricas, lembrete via WhatsApp) esta **100% implementado**, junto com multi-tenancy, superadmin com 2FA, e-mail transacional (Resend), billing via Asaas, testes automatizados, CI e deploy via Docker Compose.
 
-Detalhes de cada decisao, migrations pendentes de rodar em producao e itens bloqueados por decisao de produto (ex.: fluxo de "esqueci minha senha", que depende da escolha de um provedor de e-mail) estao documentados em [`readme.txt`](./readme.txt).
+**Billing (Asaas)**: codigo completo — checkout hospedado, webhook de pagamento, job de suspensao automatica por trial vencido ou atraso — mas **ainda nao testado contra a API real**, aguardando a API key de sandbox. **Deploy em producao**: em andamento numa instancia EC2 real, ver `readme.txt` secao 14 pro progresso atual.
+
+Detalhes de cada decisao, migrations pendentes de rodar em producao e itens em aberto estao documentados em [`readme.txt`](./readme.txt).
 
 ## ⚠️ Divida tecnica conhecida
 
 - Isolamento entre tenants e garantido **em nivel de aplicacao** (todo `.Where(tenant_id ==)`), nao por RLS com policies reais no Postgres — o backend usa a service key, que ignora RLS.
-- Sem billing/assinatura: ativar/desativar salao ainda e um toggle manual do superadmin.
+- Billing implementado mas nao testado ao vivo contra a API do Asaas (falta API key de sandbox) — o toggle manual do superadmin continua disponivel como override independente de pagamento.
 - Sem branding/dominio customizado por tenant.
-- Fluxos que dependem de e-mail transacional (recuperacao de senha, verificacao de e-mail, convite de equipe, notificacao automatica) estao propositalmente adiados ate a escolha de um provedor.
+- Sem lock distribuido nos `BackgroundService` (lembrete de agendamento, suspensao de assinatura) — assume uma unica instancia do container rodando; escalar pra multiplas instancias exigiria mover pra cron externo ou adicionar lock.
 
 ---
 

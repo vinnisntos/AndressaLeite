@@ -11,6 +11,12 @@ corrigidos e validados: agendamento do cliente E da profissional
 funcionando de ponta a ponta, rate limit/pagina 429/logout ajustados,
 migration 0006 confirmada aplicada, Docker build+run verificados de
 verdade — ver secao 11)
+| Atualizado em: 2026-07-19/20 (e-mail transacional via Resend
+implementado e validado com envio real — ver secao 12)
+| Atualizado em: 2026-07-19/20 (billing/assinatura via Asaas
+implementado — checkout hospedado, webhook, job de suspensao —
+codigo completo mas AINDA NAO testado ao vivo, API key sandbox
+pendente; deploy real em EC2 iniciado, em andamento — ver secoes 13/14)
 ========================================================================
 
 1. O QUE E O SISTEMA
@@ -77,7 +83,7 @@ Quatro niveis de usuario:
   EXCLUDE constraint (secao 4.3/4.8).
 - Historico paginado de agendamentos concluidos/cancelados, pro cliente
   e pra profissional/admin (secao 5.1/5.4).
-- Projeto de testes automatizados (49 testes) + pipeline de CI no GitHub
+- Projeto de testes automatizados (57 testes) + pipeline de CI no GitHub
   Actions (secao 4.5).
 - Dockerfile pra deploy (nao verificado com build real neste ambiente —
   ver ressalva na secao 4.6).
@@ -380,13 +386,17 @@ Quatro niveis de usuario:
      reproduzir uma condicao de corrida real pra testar, considerado baixo
      risco o suficiente pra nao bloquear o resto do roadmap.
 
-4.9. Billing/assinatura ainda nao existe (decisao consciente)
-     Combinado explicitamente com o usuario: multi-tenancy primeiro,
-     billing fica pra depois. [PARCIALMENTE RESOLVIDO] A desativacao de
-     tenant deixou de ser so via SQL direto — agora tem uma tela
-     (/SuperAdmin/Dashboard, secao 3.8), mas continua sendo um toggle
-     manual feito por voce, sem nenhuma cobranca, plano ou trial
-     associado.
+4.9. [IMPLEMENTADO 2026-07-19/20, AGUARDANDO TESTE AO VIVO — ver secao 13]
+     Billing/assinatura via Asaas
+     Plano unico (R$149,90/mes), trial de 14 dias, checkout hospedado do
+     Asaas (PIX + Cartao), suspensao automatica por trial vencido ou
+     atraso alem da tolerancia de 5 dias. O toggle manual do superadmin
+     (/SuperAdmin/Dashboard, secao 3.8) continua existindo em paralelo,
+     como override manual (suspender por fraude/abuso independente de
+     pagamento) — nao foi substituido. Codigo completo e buildado/testado
+     (dotnet build/test limpos), mas NUNCA chamou a API do Asaas de
+     verdade ainda — falta a API key sandbox. Ver secao 13 pro detalhe
+     completo.
 
 4.10. Sem branding customizavel por tenant, sem dominio proprio
      Cada salao usa o subdominio da plataforma e o mesmo layout/cores;
@@ -465,14 +475,18 @@ Quatro niveis de usuario:
      supabase/migrations/0007_email_action_tokens.sql
      supabase/migrations/0008_team_invites.sql
      supabase/migrations/0009_drop_legacy_global_email_constraint.sql
+     supabase/migrations/0010_tenant_subscriptions.sql
    (idempotentes, podem rodar mais de uma vez). A 0002 semeia
    automaticamente o tenant "studio-bella" com os dados que ja existiam;
    a 0004 semeia sua conta de superadmin (ver secao 3.8); a 0005 adiciona
    as colunas de 2FA (ver secao 3.9); a 0006 cria a trigger de bloqueio de
    cancelamento tardio e a EXCLUDE constraint anti-overlap (ver 4.3/4.8) —
    exige a extensao btree_gist (a propria migration ja faz o `create
-   extension if not exists`); a 0007/0008 sao da rodada de e-mail
-   transacional (ver secao 12). IMPORTANTE depois de rodar 0007/0008:
+   extension if not exists`); a 0007/0008/0009 sao da rodada de e-mail
+   transacional (ver secao 12); a 0010 cria tenant_subscriptions, da
+   rodada de billing/Asaas (ver secao 13). IMPORTANTE depois de rodar
+   0007/0008 (mesmo padrao vale pra qualquer tabela nova, inclusive
+   0010):
    se o app der erro "Could not find the table ... in the schema cache"
    (PGRST205), o PostgREST do Supabase ainda nao recarregou o cache de
    schema — va em Settings > API no painel e clique em "Reload schema",
@@ -945,12 +959,12 @@ Sessao dedicada a fechar o ciclo de itens nao-tecnicos que bloqueavam
      real. Detalhe completo, inclusive dos bugs achados no caminho, na
      secao 12.
 
-9.2. Gateway de pagamento/billing: ASAAS
-     Desbloqueia 4.9 (billing/assinatura, hoje so toggle manual do
-     superadmin). Proximo passo de codigo: desenhar o modelo de cobranca
-     (plano unico vs por numero de profissionais, trial, etc.) e integrar
-     API do Asaas (cobranca recorrente com PIX/boleto/cartao) — ainda NAO
-     iniciado, so a escolha do provedor foi feita.
+9.2. [IMPLEMENTADO 2026-07-19/20 — ver secao 13] Gateway de pagamento/
+     billing: ASAAS
+     Desbloqueou 4.9. Modelo de cobranca definido com o usuario (plano
+     unico R$149,90/mes, trial 14 dias, PIX+Cartao via checkout hospedado,
+     5 dias de tolerancia antes de suspender) e implementado. Detalhe
+     completo na secao 13.
 
 9.3. Hospedagem de producao: EC2 (AWS), DNS provavelmente na Route53
      Criados nesta rodada (na raiz do repo, prontos pra uso, NAO testados
@@ -970,13 +984,20 @@ Sessao dedicada a fechar o ciclo de itens nao-tecnicos que bloqueavam
        - docs/DEPLOY_AWS.md: passo a passo completo (IAM Role, Elastic IP,
          Security Group, registros DNS na Route53, instalar Docker na
          instancia, primeiro deploy).
-     ACAO NECESSARIA: nada disso foi executado numa EC2 real ainda —
-     proximo passo e seguir o docs/DEPLOY_AWS.md na instancia de verdade e
-     confirmar que o certificado wildcard emite.
-     RESSALVA: o plano assume a zona DNS do dominio na Route53. Se o
-     dominio estiver em outro registrador (Registro.br, etc.), ver a nota
-     no topo do docs/DEPLOY_AWS.md (migrar a zona pra Route53 ou trocar o
-     plugin do Caddy).
+     ATUALIZACAO 2026-07-19/20: deploy real EM ANDAMENTO numa instancia
+     EC2 que ja existia (compartilhada com outros dois projetos do
+     usuario) — ver secao 14 pro detalhe completo e o progresso atual.
+     docs/DEPLOY_AWS.md foi reescrito no caminho pra cobrir dois casos que
+     o texto original nao previa: (a) instancia ja compartilhada com
+     outros apps (passo 0 novo, "cheque o que ja existe" antes de criar
+     qualquer recurso duplicado) e (b) dominio raiz num registrador que
+     nao e Route53 (Registro.br, etc.) — nesse caso a opcao recomendada
+     agora e delegar so o subdominio do MarcAi pro Route53 via registro
+     NS (opcao "a" documentada no topo do arquivo), sem migrar o dominio
+     inteiro nem tocar nos registros dos outros projetos. Tambem ganhou
+     instrucoes de instalacao do Docker pra Ubuntu (apt, repositorio
+     oficial da Docker) alem das de Amazon Linux 2023 (dnf) que ja
+     existiam, ja que a instancia real do usuario roda Ubuntu 24.04.
 
 9.4. Rascunho de Termos de Uso e Politica de Privacidade (LGPD)
      Criados docs/TERMOS_DE_USO.md e docs/POLITICA_DE_PRIVACIDADE.md — sao
@@ -1230,10 +1251,10 @@ Dado de teste criado e ja removido/mantido nesta rodada, pra registro:
 
 O que NAO foi coberto nesta rodada (fora do escopo dos achados da secao
 10, continuam como estavam):
-  - Testes automatizados novos pros bugs corrigidos — os 49 testes
-    existentes nao cobrem Razor Pages/Supabase real (mesma limitacao ja
-    registrada na secao 4.5); nenhum teste de regressao foi escrito pro
-    fluxo de agendamento nesta rodada.
+  - Testes automatizados novos pros bugs corrigidos — os 49 testes (na
+    epoca; hoje sao 57, ver secao 12) existentes nao cobrem Razor Pages/
+    Supabase real (mesma limitacao ja registrada na secao 4.5); nenhum
+    teste de regressao foi escrito pro fluxo de agendamento nesta rodada.
   - O aviso de DataProtection key persistence (achado novo do 10.7) —
     registrado, mas nao corrigido, por ser uma decisao de infraestrutura
     de deploy (qual storage persistente usar), nao um bug de codigo.
@@ -1433,3 +1454,237 @@ do que foi encontrado no caminho abaixo.
       xgamesparanaue157@gmail.com sem o "+", ficou "pendente" pra sempre
       (nunca vai ser aceito, expira sozinho em 7 dias) — exatamente o
       efeito colateral do bug 12.2.c, deixado como evidencia.
+
+------------------------------------------------------------------------
+13. BILLING (ASAAS) — IMPLEMENTADO, AGUARDANDO TESTE AO VIVO (2026-07-19/20)
+------------------------------------------------------------------------
+Pedido do usuario apos fechar a rodada de e-mail: "Vamos de billing
+(Asaas)". Modelo de cobranca combinado via perguntas diretas antes de
+codar: plano unico fixo (nao por numero de profissionais), trial de 14
+dias, PIX + Cartao de Credito, tolerancia de 5 dias apos vencimento antes
+de suspender, R$149,90/mes, ambiente sandbox do Asaas (nunca producao
+nem cobranca real).
+
+13.1. Decisao de arquitetura: checkout hospedado do Asaas, nao a API de
+      assinatura "crua"
+      O Asaas oferece duas formas de criar assinatura recorrente: (a)
+      POST /v3/subscriptions direto, que exige coletar e enviar dado de
+      cartao no proprio formulario (entra em escopo de PCI); (b) POST
+      /v3/checkouts (chargeTypes: RECURRENT), onde so se manda dados do
+      PEDIDO e o Asaas devolve uma URL de checkout hospedado onde ELE
+      coleta PIX ou cartao — o backend nunca ve dado de cartao. Escolhida
+      a opcao (b), decisao proativa (nao pedida explicitamente pelo
+      usuario, mas justificada por eliminar risco de seguranca
+      desnecessario).
+
+13.2. O que foi construido
+      - Migration 0010_tenant_subscriptions.sql: tabela nova
+        tenant_subscriptions (1:1 com tenants via tenant_id unique),
+        status (trial/pending_payment/active/overdue/suspended/
+        cancelled, com check constraint), plan_price, trial_ends_at,
+        asaas_customer_id/subscription_id/checkout_id, next_due_date,
+        overdue_since, last_payment_at. RLS habilitado sem policy, mesmo
+        padrao das outras tabelas novas (0004/0008).
+      - Models/TenantSubscription.cs: toda propriedade DateTime passa
+        pelo mesmo padrao de correcao do bug 12.2.a
+        (Services/PostgrestTime.ToTrueUtc no setter) — sem isso, a conta
+        de tolerancia de 5 dias ficaria errada em qualquer ambiente fora
+        de UTC.
+      - Services/IAsaasService.cs + AsaasService.cs: HttpClient tipado
+        (mesmo molde do ResendEmailService), CreateCheckoutSessionAsync
+        monta o payload do checkout (billingTypes PIX+CREDIT_CARD,
+        subscription mensal, externalReference = tenant.Id — e assim que
+        o webhook sabe de qual salao e o pagamento) e devolve a URL pra
+        redirecionar o admin. Header de auth e access_token (nao
+        Authorization: Bearer — API do Asaas usa esquema proprio), mais
+        User-Agent (exigido pra contas Asaas criadas depois de jun/2024).
+        Config: Asaas:ApiKey/BaseUrl/CheckoutBaseUrl (default apontando
+        pro sandbox, api-sandbox.asaas.com).
+      - Pages/Admin/Assinatura.cshtml(.cs): tela dedicada (protegida pela
+        policy AdminOnly ja existente na pasta /Admin), mostra status
+        atual (dias de trial restantes, proxima cobranca, dias de
+        tolerancia restantes se atrasado, ou suspenso) e formulario de
+        assinar (nome, CPF/CNPJ, telefone) que cria o checkout e
+        redireciona pro Asaas.
+      - Pages/Webhooks/Asaas.cshtml(.cs): endpoint publico novo
+        (AllowAnonymousToFolder("/Webhooks") em Program.cs), valida o
+        header "asaas-access-token" contra Asaas:WebhookToken configurado
+        (401 se nao bater) antes de processar qualquer coisa. Em
+        PAYMENT_CONFIRMED/PAYMENT_RECEIVED: marca a assinatura "active",
+        grava os IDs do Asaas, e se o tenant estava suspenso, REATIVA
+        (tenant.IsActive=true + invalida cache do
+        TenantResolutionMiddleware). Em PAYMENT_OVERDUE: marca "overdue"
+        e grava overdue_since (so na primeira vez, nao reseta a cada
+        webhook repetido). Nova policy de rate limit "asaas-webhook"
+        (60/min/IP — defesa em profundidade, a validacao do token e a
+        defesa primaria).
+      - Services/TenantSuspensionService.cs: segundo BackgroundService do
+        projeto (o primeiro foi o AppointmentReminderService da secao
+        12), tick de 6h. A cada tick: cria linha de trial pra tenant
+        antigo sem tenant_subscriptions ainda (tenants criados antes
+        desta feature existir, trial novo a partir de agora, nao
+        retroativo); suspende trial vencido sem assinatura; suspende
+        atraso alem dos 5 dias de tolerancia.
+      - GAP DE SEGURANCA FECHADO (achado durante a pesquisa, nao pedido
+        explicitamente): ate esta rodada, uma sessao JA AUTENTICADA
+        continuava com acesso total mesmo se o tenant fosse suspenso no
+        meio da sessao — so as paginas anonimas (Login, Cadastro, etc.)
+        checavam IsActive. Sem esse fix, suspender por atraso de
+        pagamento nao bloqueava ninguem que ja estivesse logado. Fechado
+        no mesmo middleware global que ja checa mismatch de claim de
+        tenant (Program.cs) — sessao com tenant suspenso e redirecionada
+        pra /Index.
+      - CriarSalao.cshtml.cs: onboarding de salao novo agora insere a
+        linha inicial em tenant_subscriptions (status trial, 14 dias),
+        try/catch so-loga — Asaas fora do ar NUNCA pode impedir a criacao
+        de um salao, mesmo padrao ja usado pro envio do e-mail de
+        verificacao (secao 12).
+      - DashAdmin e SuperAdmin/Dashboard ganharam badge de status da
+        assinatura (Services/SubscriptionStatusFormatter.cs,
+        compartilhado pelos dois — evita duplicar o switch de
+        label/cor). O toggle manual do superadmin (secao 3.8) continua
+        existindo, agora ao lado do badge, como override independente do
+        pagamento.
+
+13.3. Bugs corrigidos no caminho (achados nesta rodada, nenhum
+      pre-existente)
+      a) Expressao LINQ invalida em Assinatura.cshtml.cs: tentativa de
+         chamar AuthorizationService.TryGetUserId(User, out var uid)
+         dentro do proprio lambda de um .Where() — arvore de expressao
+         nao aceita out var inline. Corrigido resolvendo userId numa
+         variavel local ANTES da query.
+      b) Ok() nao existe em PageModel (so em Controller) — CS0103 em 4
+         pontos de Pages/Webhooks/Asaas.cshtml.cs. Corrigido com `new
+         OkResult()` (Unauthorized(), estranhamente, ESTA disponivel em
+         PageModel — assimetria da base class, nao documentada em lugar
+         nenhum obvio).
+      c) Risco de dupla-correcao de fuso identificado por revisao propria
+         do codigo (nao por erro em runtime): payment.DueDate, que vem
+         desserializado do JSON do webhook via System.Text.Json (Kind=
+         Unspecified, mas NAO passou pelo postgrest-csharp), seria
+         incorretamente "corrigido" de novo por PostgrestTime.ToTrueUtc
+         se atribuido direto a NextDueDate (que usa esse setter pro caso
+         normal, dado vindo do Postgres). Corrigido com
+         DateTime.SpecifyKind(payment.DueDate.Value, DateTimeKind.Utc)
+         explicito antes de atribuir — o valor do Asaas ja e UTC de
+         verdade, so precisava da Kind certa, nao de conversao.
+
+13.4. NAO TESTADO AO VIVO — bloqueado pela API key do Asaas
+      dotnet build/test limpos (57/57), mas o codigo NUNCA chamou a API
+      do Asaas de verdade: nenhum checkout foi criado, nenhum webhook foi
+      recebido (nem simulado via curl, que era o plano B ja que nao ha
+      tunel/ngrok configurado pra expor o ambiente local pra internet), a
+      suspensao automatica nunca rodou contra dado real. ACAO NECESSARIA
+      SUA: gerar uma API key de SANDBOX no painel do Asaas e rodar
+      `dotnet user-secrets set "Asaas:ApiKey" "..."` (mesmo esquema do
+      Resend — a chave nunca e pedida em texto no chat). O
+      Asaas:WebhookToken ja foi gerado e configurado via user-secrets
+      nesta sessao (segredo aleatorio de 24 bytes, nao registrado aqui).
+      Roteiro de teste planejado assim que a key existir: criar salao
+      novo (trial comeca) -> /Admin/Assinatura -> preencher CPF/CNPJ de
+      teste do sandbox -> "Assinar" -> checkout hospedado do Asaas ->
+      pagamento simulado (sandbox tem cartao/PIX de teste) -> confirmar
+      checkout criado e webhook OU testar o handler do webhook isolado
+      via curl com payload simulado -> manipular overdue_since/
+      trial_ends_at direto via REST e reiniciar o app pra forcar o
+      primeiro tick do TenantSuspensionService -> confirmar que uma
+      sessao ja logada perde acesso quando o tenant e suspenso no meio
+      dela (o gap fechado em 13.2).
+
+13.5. Configuracao adicionada (nao mudou nada que ja existia)
+      appsettings.example.json, .env.example e docker-compose.yml
+      ganharam as chaves Asaas:ApiKey/BaseUrl/CheckoutBaseUrl/
+      WebhookToken (ASAAS_API_KEY/BASE_URL/CHECKOUT_BASE_URL/
+      WEBHOOK_TOKEN como variavel de ambiente). BaseUrl/CheckoutBaseUrl
+      ja vem com default apontando pro sandbox — trocar pros hosts de
+      producao (api.asaas.com / asaas.com) so quando sair do sandbox de
+      verdade, decisao consciente do usuario, nunca automatica.
+
+------------------------------------------------------------------------
+14. DEPLOY EM EC2 REAL — EM ANDAMENTO (2026-07-19/20)
+------------------------------------------------------------------------
+Pedido do usuario, ainda sem a API key do Asaas: "quero subir a aplicacao
+na instancia EC2 da AWS pra rodar por la" — pausando o teste ao vivo do
+billing (secao 13.4) e priorizando deploy real.
+
+14.1. Contexto: instancia ja existente, compartilhada com outros projetos
+      Nao e uma instancia dedicada ao MarcAi — ja roda um app de
+      passagens (.NET) e um portfolio (Vite/React 19) do usuario, cada um
+      na propria porta, sem reverse proxy na frente. Levantado antes de
+      qualquer acao pra nao duplicar/quebrar nada:
+        - Instance ID i-0ea037e8a9c00acdf, t3.micro, Ubuntu 24.04
+          (ubuntu-noble), regiao us-east-2.
+        - Elastic IP CONFIRMADO: 3.128.124.202 (ja associado, estavel —
+          nao precisou alocar um novo).
+        - Sem IAM Role anexada ainda (necessaria pro desafio DNS-01 do
+          Route53 — ver 14.3).
+        - Acesso SSH ja funciona normalmente pro usuario (par de chaves
+          "chave-aws").
+        - Portas 80/443 livres no host (cada app existente usa porta
+          propria) — sem conflito esperado com o container Caddy do
+          MarcAi.
+      docs/DEPLOY_AWS.md foi atualizado no caminho pra cobrir esse
+      cenario de instancia compartilhada (secao 9.3 tem o resumo do que
+      mudou no arquivo).
+
+14.2. Dominio: marcai.vinnisantos.com.br, delegado do Registro.br pro
+      Route53
+      O dominio vinnisantos.com.br inteiro esta registrado no
+      Registro.br (usado tambem pelo portfolio, ex.
+      noreply.vinnisantos.com.br ja verificado no Resend — secao 12), NAO
+      no Route53 — diferente do que o docs/DEPLOY_AWS.md original
+      assumia. Como o MarcAi precisa de certificado WILDCARD
+      (*.marcai.vinnisantos.com.br, um subdominio por salao — secao 3.6),
+      e wildcard so e possivel via desafio DNS-01, que exige uma API de
+      DNS (o Registro.br nao tem plugin Caddy conhecido).
+      SOLUCAO ESCOLHIDA: delegar so o subdominio `marcai` pro Route53,
+      sem migrar o dominio inteiro nem tocar em nenhum registro dos
+      outros projetos:
+        1. Criar hosted zone no Route53 com o nome completo
+           marcai.vinnisantos.com.br (nao so "marcai") — gera 4
+           nameservers da AWS + o Hosted Zone ID.
+        2. No painel do Registro.br (Edicao de Zona DNS de
+           vinnisantos.com.br), adicionar um registro NS com nome
+           "marcai" apontando pros 4 nameservers do passo 1.
+        3. Como a hosted zone criada JA E marcai.vinnisantos.com.br
+           (nao a raiz do dominio todo), os registros A dentro dela usam
+           nome vazio (raiz da zone) e "*", nao "marcai"/"*.marcai".
+      EM ANDAMENTO: usuario optou por fazer os passos 1 e 2 manualmente
+      pelo Console/painel do Registro.br (preferencia explicita, em vez
+      de eu guiar clique a clique). Falta: Hosted Zone ID (pra escopar a
+      IAM Role da secao 14.3) e confirmacao de que a delegacao NS
+      propagou.
+
+14.3. Proximos passos (nesta ordem, retomar daqui)
+      1. Usuario cria a hosted zone Route53 + delega NS no Registro.br
+         (14.2, em andamento).
+      2. IAM Role: criar (instancia nao tem nenhuma ainda) com policy
+         escopada ao Hosted Zone ID da nova zone, anexar a instancia —
+         policy JSON exata em docs/DEPLOY_AWS.md secao 1.
+      3. Security Group: liberar 80/tcp, 443/tcp, 443/udp (22/tcp ja
+         liberado, e como o usuario ja acessa via SSH).
+      4. Registros A dentro da hosted zone marcai.vinnisantos.com.br:
+         raiz e "*", ambos -> 3.128.124.202.
+      5. Confirmar Docker instalado na instancia (comando de checagem em
+         docs/DEPLOY_AWS.md secao 0) — instalar via apt (instrucoes
+         Ubuntu novas no arquivo) se ainda nao tiver.
+      6. git clone + cp .env.example .env + preencher (Supabase, Resend,
+         Asaas — Asaas:ApiKey pode ficar vazio por enquanto, ver 13.4) +
+         docker compose up -d --build + acompanhar docker compose logs -f
+         caddy ate confirmar emissao do certificado wildcard.
+      7. Depois do primeiro deploy: rodar as migrations 0001-0010
+         pendentes no SQL Editor do Supabase (ordem na secao 6), testar
+         https://marcai.vinnisantos.com.br/ e
+         https://qualquer-slug.marcai.vinnisantos.com.br/.
+      ACAO NECESSARIA SUA: nada disso foi executado numa instancia real
+      ainda alem da checagem inicial (14.1) — nenhum recurso AWS novo foi
+      criado nesta sessao.
+
+14.4. Fora de escopo por enquanto, decisao explicita do usuario
+      Deploy automatizado via GitHub Actions (que o usuario ja usa nos
+      outros dois projetos da mesma instancia) fica pra DEPOIS do
+      primeiro deploy manual funcionar — mais facil depurar emissao de
+      certificado TLS na primeira vez acompanhando o log ao vivo via SSH
+      do que via pipeline. Quando chegar la, e so um step de
+      `ssh ... "cd marcai && git pull && docker compose up -d --build"`
+      num workflow novo.
