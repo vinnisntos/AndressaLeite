@@ -42,7 +42,9 @@
                         <a class="nav-link" asp-page="/SuperAdmin/Security">Segurança</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link text-danger" asp-page="/Auth/Logout">Sair</a>
+                        <form method="post" asp-page="/Auth/Logout">
+                            <button type="submit" class="nav-link text-danger border-0 bg-transparent p-0">Sair</button>
+                        </form>
                     </li>
                 }
                 else if (isAuthenticated)
@@ -81,7 +83,9 @@
 
                     <!-- Logout (apenas autenticado) -->
                     <li class="nav-item">
-                        <a class="nav-link text-danger" asp-page="/Auth/Logout">Sair</a>
+                        <form method="post" asp-page="/Auth/Logout">
+                            <button type="submit" class="nav-link text-danger border-0 bg-transparent p-0">Sair</button>
+                        </form>
                     </li>
                 }
                 else if (CurrentTenant.IsResolved)

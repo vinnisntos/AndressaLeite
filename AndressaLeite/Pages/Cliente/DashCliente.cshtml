@@ -4,21 +4,21 @@
     Layout = "/Pages/Shared/_Layout.cshtml";
 }
 
+@if (!string.IsNullOrEmpty(Model.ErrorMessage))
+{
+    <div class="alert alert-danger card-custom border-0 p-3 mb-4 small">@Model.ErrorMessage</div>
+}
+@if (!string.IsNullOrEmpty(Model.SuccessMessage))
+{
+    <div class="alert alert-success card-custom border-0 p-3 mb-4 small">@Model.SuccessMessage</div>
+}
+
 @if (Model.CurrentStep == "home")
 {
     <div class="mb-4">
         <h4 class="fw-bold mb-1 fs-4">Oi, @Model.ClientName!</h4>
         <p class="text-muted fs-6">É ótimo ter você aqui! O que vamos fazer hoje?</p>
     </div>
-
-    @if (!string.IsNullOrEmpty(Model.ErrorMessage))
-    {
-        <div class="alert alert-danger card-custom border-0 p-3 mb-4 small">@Model.ErrorMessage</div>
-    }
-    @if (!string.IsNullOrEmpty(Model.SuccessMessage))
-    {
-        <div class="alert alert-success card-custom border-0 p-3 mb-4 small">@Model.SuccessMessage</div>
-    }
 
     <!-- Menu Principal UX Moderno -->
     <div class="d-grid gap-3 mb-5">
@@ -125,7 +125,7 @@
     <div class="list-group gap-2">
         @foreach (var pro in Model.Employees)
         {
-            <a asp-page="/Cliente/DashCliente" asp-route-step="service" asp-route-proId="@pro.Id" class="list-group-item list-group-item-action card-custom p-3 bg-white d-flex align-items-center justify-content-between">
+            <a asp-page="/Cliente/DashCliente" asp-route-step="service" asp-route-SelectedProId="@pro.Id" class="list-group-item list-group-item-action card-custom p-3 bg-white d-flex align-items-center justify-content-between">
                 <div>
                     <h6 class="fw-bold mb-0">@pro.FullName</h6>
                     <span class="text-muted small">Designer de Sobrancelhas</span>
@@ -145,7 +145,7 @@
     <div class="list-group gap-2">
         @foreach (var srv in Model.Services)
         {
-            <a asp-page="/Cliente/DashCliente" asp-route-step="datetime" asp-route-proId="@Model.SelectedProId" asp-route-srvId="@srv.Id" class="list-group-item list-group-item-action card-custom p-3 bg-white">
+            <a asp-page="/Cliente/DashCliente" asp-route-step="datetime" asp-route-SelectedProId="@Model.SelectedProId" asp-route-SelectedSrvId="@srv.Id" class="list-group-item list-group-item-action card-custom p-3 bg-white">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
                         <h6 class="fw-bold mb-1">@srv.Name</h6>
@@ -161,7 +161,7 @@
 @if (Model.CurrentStep == "datetime")
 {
     <div class="mb-4">
-        <a asp-page="/Cliente/DashCliente" asp-route-step="service" asp-route-proId="@Model.SelectedProId" class="text-decoration-none text-secondary small">← Voltar</a>
+        <a asp-page="/Cliente/DashCliente" asp-route-step="service" asp-route-SelectedProId="@Model.SelectedProId" class="text-decoration-none text-secondary small">← Voltar</a>
         <h4 class="fw-bold mt-2 fs-4">Escolha o Horário</h4>
     </div>
     <form method="post" asp-page-handler="Book">

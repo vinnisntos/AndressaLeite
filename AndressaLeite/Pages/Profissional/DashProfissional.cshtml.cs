@@ -274,6 +274,11 @@ namespace AndressaLeite.Pages.Profissional
             {
                 var newAppointment = new Appointment
                 {
+                    // Sem isso, o Id fica string.Empty (default do modelo) e o
+                    // Postgrest.Insert manda "id": "" no payload — o Postgres
+                    // rejeita ("invalid input syntax for type uuid") em vez de
+                    // usar o default uuid_generate_v4() da coluna (achado de QA).
+                    Id = Guid.NewGuid().ToString(),
                     ClientId = null,
                     EmployeeId = employeeId,
                     ServiceId = service.Id,

@@ -2,6 +2,15 @@
 MARCAI — DIAGNOSTICO DO PROJETO E REQUISITOS FALTANTES
 Gerado em: 2026-07-16 | Atualizado em: 2026-07-17 (Fases 1-8 + superadmin com
 2FA + rebrand + trigger de cancelamento/EXCLUDE + testes automatizados + CI)
+| Atualizado em: 2026-07-18 (decisoes de prontidao comercial: provedor de
+e-mail, gateway de pagamento, hospedagem de producao — ver secao 9)
+| Atualizado em: 2026-07-19 (QA ao vivo: bug bloqueador no agendamento do
+cliente + outros achados, com prioridade de correcao — ver secao 10)
+| Atualizado em: 2026-07-19, mais tarde (todos os achados da secao 10
+corrigidos e validados: agendamento do cliente E da profissional
+funcionando de ponta a ponta, rate limit/pagina 429/logout ajustados,
+migration 0006 confirmada aplicada, Docker build+run verificados de
+verdade — ver secao 11)
 ========================================================================
 
 1. O QUE E O SISTEMA
@@ -143,14 +152,16 @@ Quatro niveis de usuario:
      codigo — e checklist operacional a resolver antes do primeiro
      cliente pagante.
 
-3.7. Status das migrations: 0001-0005 RODADAS COM SUCESSO, 0006 PENDENTE
+3.7. Status das migrations: 0001-0006 RODADAS COM SUCESSO
      supabase/migrations/0001 a 0005 ja foram aplicadas no projeto Supabase
      (confirmado por voce em 2026-07-17). studio-bella e demais tenants
      resolvem normalmente, a conta de superadmin ja existe e o 2FA dela
-     esta ativo. ACAO NECESSARIA: supabase/migrations/
-     0006_cancellation_trigger_and_overlap_constraint.sql ainda NAO foi
-     rodada — ver secao 4.3/4.8 pro que ela faz e secao 6 pra ordem
-     completa.
+     esta ativo. A 0006_cancellation_trigger_and_overlap_constraint.sql
+     — que por muito tempo apareceu aqui como "pendente" — foi CONFIRMADA
+     como ja aplicada em 2026-07-19, por teste comportamental via REST
+     (trigger de cancelamento tardio e EXCLUDE constraint de overlap
+     ambas ativas e rejeitando corretamente — ver secao 10.5 pro
+     detalhe). Este documento estava desatualizado, nao o banco.
 
 3.8. Superadmin da plataforma (cross-tenant) — NOVO
      Painel /SuperAdmin, usado so pelo dono da MarcAi, pra ativar/
@@ -457,7 +468,7 @@ Quatro niveis de usuario:
      supabase/migrations/0003_agenda_enriquecida.sql
      supabase/migrations/0004_platform_admins.sql
      supabase/migrations/0005_superadmin_security.sql
-     supabase/migrations/0006_cancellation_trigger_and_overlap_constraint.sql  <- AINDA NAO RODADA
+     supabase/migrations/0006_cancellation_trigger_and_overlap_constraint.sql  <- JA RODADA (confirmado 2026-07-19, ver 3.7/10.5)
    (idempotentes, podem rodar mais de uma vez). A 0002 semeia
    automaticamente o tenant "studio-bella" com os dados que ja existiam;
    a 0004 semeia sua conta de superadmin (ver secao 3.8); a 0005 adiciona
@@ -887,11 +898,11 @@ historico paginado (5.1/5.4). O roadmap inteiro da Agenda Enriquecida
 
 O que continua genuinamente em aberto, e por que:
 
-  1. ACAO NECESSARIA SUA (migrations pendentes de rodar no Supabase):
-     - supabase/migrations/0006_cancellation_trigger_and_overlap_constraint.sql
-       (ver 4.3/4.8/6).
-  2. ACAO NECESSARIA SUA (verificacao com ferramenta que este ambiente
-     nao tem):
+  1. [RESOLVIDO 2026-07-19] Migration 0006 — confirmada como ja aplicada
+     no Supabase, esta linha estava desatualizada (ver 3.7/10.5).
+  2. [RESOLVIDO 2026-07-19] `docker build` + `docker run` do Dockerfile
+     — verificado de ponta a ponta, imagem builda e o container responde
+     200 (ver 10.7). Texto original abaixo, mantido por historico:
      - `docker build` + `docker run` do Dockerfile novo (ver 4.6/6.1) —
        nunca executado aqui por falta de Docker instalado neste ambiente
        de desenvolvimento.
@@ -915,3 +926,315 @@ O que continua genuinamente em aberto, e por que:
      constraint da 4.8 disparar de fato (caso raro de corrida).
 
 Nao ha mais itens de codigo pendentes fora dessas cinco categorias.
+
+------------------------------------------------------------------------
+9. PRONTIDAO COMERCIAL — DECISOES DE 2026-07-18
+------------------------------------------------------------------------
+Sessao dedicada a fechar o ciclo de itens nao-tecnicos que bloqueavam
+"vender o sistema" (analise pedida pelo usuario). Decisoes tomadas:
+
+9.1. Provedor de e-mail transacional: RESEND
+     Desbloqueia (ainda NAO implementados nesta rodada, so a decisao foi
+     tomada): 4.1 (esqueci minha senha), 4.2 (verificacao de e-mail), 5.3
+     (notificacao automatica), 5.6 (convite de equipe por e-mail). Proximo
+     passo de codigo: criar conta Resend, verificar dominio (SPF/DKIM),
+     adicionar pacote/HTTP client pro envio, e implementar os 4 itens
+     juntos (compartilham a mesma configuracao de envio, como ja previsto
+     na secao 4.2).
+
+9.2. Gateway de pagamento/billing: ASAAS
+     Desbloqueia 4.9 (billing/assinatura, hoje so toggle manual do
+     superadmin). Proximo passo de codigo: desenhar o modelo de cobranca
+     (plano unico vs por numero de profissionais, trial, etc.) e integrar
+     API do Asaas (cobranca recorrente com PIX/boleto/cartao) — ainda NAO
+     iniciado, so a escolha do provedor foi feita.
+
+9.3. Hospedagem de producao: EC2 (AWS), DNS provavelmente na Route53
+     Criados nesta rodada (na raiz do repo, prontos pra uso, NAO testados
+     em EC2 real ainda — mesma ressalva do Dockerfile original, secao 4.6):
+       - docker-compose.yml: orquestra o container "app" (Dockerfile
+         existente) + um container "caddy" (reverse proxy com TLS
+         automatico).
+       - Dockerfile.caddy: builda Caddy com o plugin
+         github.com/caddy-dns/route53 (necessario pro desafio DNS-01 do
+         Let's Encrypt — unico jeito de emitir certificado WILDCARD,
+         mesma exigencia ja documentada na secao 3.6).
+       - Caddyfile: config do proxy, dominio + wildcard apontando pro
+         container "app:8080".
+       - .env.example: variaveis exigidas (Supabase, dominio, e-mail do
+         ACME, regiao AWS). Recomendado usar IAM Role na instancia EC2 em
+         vez de AWS_ACCESS_KEY_ID/SECRET no .env — ver docs/DEPLOY_AWS.md.
+       - docs/DEPLOY_AWS.md: passo a passo completo (IAM Role, Elastic IP,
+         Security Group, registros DNS na Route53, instalar Docker na
+         instancia, primeiro deploy).
+     ACAO NECESSARIA: nada disso foi executado numa EC2 real ainda —
+     proximo passo e seguir o docs/DEPLOY_AWS.md na instancia de verdade e
+     confirmar que o certificado wildcard emite.
+     RESSALVA: o plano assume a zona DNS do dominio na Route53. Se o
+     dominio estiver em outro registrador (Registro.br, etc.), ver a nota
+     no topo do docs/DEPLOY_AWS.md (migrar a zona pra Route53 ou trocar o
+     plugin do Caddy).
+
+9.4. Rascunho de Termos de Uso e Politica de Privacidade (LGPD)
+     Criados docs/TERMOS_DE_USO.md e docs/POLITICA_DE_PRIVACIDADE.md — sao
+     RASCUNHOS, com campos entre [colchetes] pra preencher (CNPJ, foro,
+     politica de retencao de dados, etc.) e aviso explicito de que
+     precisam de revisao juridica antes de publicar/vincular clientes.
+     Nao sao um documento final.
+
+9.5. Docker/WSL2 (retomando o item 4.6)
+     `wsl --install` disparado nesta sessao pra instalar a distro padrao
+     (Ubuntu) — a virtualizacao na BIOS ja estava habilitada de uma sessao
+     anterior. Depois de completar, falta reiniciar a maquina, instalar o
+     Docker Desktop (opcao "Use WSL 2 instead of Hyper-V" marcada) e so
+     entao rodar a verificacao `docker build`/`docker run` que nunca foi
+     feita de fato — ver status live no momento em que isto for lido, pode
+     ja ter avancado.
+
+9.6. Ainda em aberto (nao coberto nesta rodada)
+     - Migration 0006: JA RODADA — item resolvido/confirmado em
+       2026-07-19 (ver 3.7/10.5). Esta linha ficou errada por dois dias
+       porque ninguem atualizou o readme depois de rodar a migration.
+     - Observabilidade em producao (logging centralizado, APM, alerta de
+       erro) — nao existe nada implementado nem planejado ainda.
+     - Branding por tenant (4.10) — decisao consciente de continuar
+       adiada.
+
+------------------------------------------------------------------------
+10. QA AO VIVO — ACHADOS E PRIORIDADE DE CORRECAO (2026-07-19)
+------------------------------------------------------------------------
+Sessao de teste funcional real (navegador, ambiente local, dotnet run +
+tenant studio-bella) combinada com auditoria de codigo, pedida
+explicitamente pelo usuario como "atue como QA tester". Todos os itens
+desta secao foram corrigidos numa rodada seguinte, no mesmo dia — ver
+secao 11 pro fechamento e o que cada correcao mudou de fato.
+
+10.1. [P0 — BLOQUEADOR, RESOLVIDO] Agendamento pelo cliente estava 100%
+      quebrado
+      Reproduzido ao vivo: criando uma conta de cliente nova em
+      studio-bella.localhost e clicando em "Agendar um Horario" ->
+      escolher a profissional, a tela voltava pra ela mesma, sem nenhuma
+      mensagem de erro. Acontecia sempre, com qualquer profissional,
+      tanto por clique quanto por URL direta.
+      CAUSA RAIZ: Pages/Cliente/DashCliente.cshtml (linhas 128, 148, 164)
+      gerava os links de navegacao do wizard com asp-route-proId e
+      asp-route-srvId (minusculo), mas as propriedades da PageModel que
+      deveriam receber esses valores de volta se chamam SelectedProId e
+      SelectedSrvId (DashCliente.cshtml.cs linhas 44-45), sem nenhum
+      [FromQuery(Name=...)] de alias. Como os nomes nao batiam, o model
+      binding do ASP.NET Core nunca preenchia SelectedProId a partir da
+      URL — chegava sempre null. O guard clause em DashCliente.cshtml.cs
+      redirecionava entao de volta pro passo "pro". A mensagem de erro
+      (TempData ErrorMessage) ate existia, mas o bloco que a renderiza em
+      DashCliente.cshtml so estava dentro do "if (CurrentStep ==
+      'home')" — nas etapas "pro"/"service" ela era descartada
+      silenciosamente, entao a cliente nao via nada, so parecia que o
+      clique nao fazia nada.
+      IMPACTO: nenhuma cliente conseguia completar um agendamento pelo
+      autoatendimento — a funcionalidade central do produto.
+      POR QUE PASSOU DESPERCEBIDO: os 49 testes automatizados (secao 4.5)
+      cobrem so TotpService e AuthorizationService — a propria secao 4.5
+      ja registra que a logica dependente do Supabase real "ficou fora"
+      da cobertura.
+
+      DOIS OUTROS BUGS ENCONTRADOS NO MESMO CAMINHO CRITICO, so visiveis
+      depois de corrigir o de cima (o teste nunca tinha chegado tao
+      longe antes):
+        a) O input <input type="datetime-local" asp-for="SelectedDateTime">
+           (DashCliente.cshtml linha 174) renderizava o atributo "value"
+           com segundos/milissegundos de DateTime.Now.AddDays(1) (ex.:
+           "...T11:58:39.116"). Sem "min" explicito, o HTML5 usa esse
+           mesmo atributo como base do step de validacao — o navegador
+           so aceitava horarios caindo EXATAMENTE nesse instante fracionado
+           repetido a cada minuto, o que nenhum datetime-picker nativo
+           (granularidade de minuto) consegue produzir. Bloqueava o
+           submit do formulario silenciosamente, sem nenhum erro visivel
+           (validacao HTML5 nativa do navegador, nao chegava a bater no
+           servidor).
+        b) Mesmo com a data valida, o POST falhava no servidor com
+           Postgrest.Exceptions.PostgrestException: "invalid input syntax
+           for type uuid: ''''". Appointment.Id (Models/Appointement.cs
+           linha 10) tem default string.Empty, e nem
+           DashCliente.cshtml.cs (OnPostBookAsync) nem
+           DashProfissional.cshtml.cs (agendamento manual da profissional)
+           geravam um Guid novo antes do Insert — ao contrario de
+           Tenant/Profile/Service, que ja faziam Id = Guid.NewGuid().
+           ToString() (ver CriarSalao.cshtml.cs, DashAdmin.cshtml.cs). O
+           Postgrest.Insert mandava "id": "" no payload, e o Postgres
+           rejeitava em vez de aplicar o default uuid_generate_v4() da
+           coluna. Ou seja: o agendamento MANUAL feito pela
+           profissional/admin (Fase 5 do roadmap, secao 7) estava com o
+           EXATO MESMO BUG e nunca tinha sido pego — nenhum dos dois
+           caminhos de criacao de agendamento funcionava.
+      CORRECAO APLICADA (as tres partes):
+        - DashCliente.cshtml linhas 128/148/164: asp-route-proId/srvId
+          trocado por asp-route-SelectedProId/SelectedSrvId (e o mesmo
+          ajuste nos RedirectToPage de DashCliente.cshtml.cs que usavam
+          "proId" como nome de route value).
+        - DashCliente.cshtml: bloco de ErrorMessage/SuccessMessage movido
+          pra fora do "if (CurrentStep == 'home')", pra cima de todos os
+          @if de step — aparece em qualquer etapa do wizard agora.
+        - DashCliente.cshtml.cs: SelectedDateTime default trocado de
+          DateTime.Now.AddDays(1) pra uma versao truncada pro minuto
+          (TruncateToMinute), alinhando o step-base do input HTML5 ao que
+          um datetime-picker real consegue produzir.
+        - DashCliente.cshtml.cs e DashProfissional.cshtml.cs: adicionado
+          Id = Guid.NewGuid().ToString() na criacao do novo Appointment
+          nos dois pontos (agendamento do cliente e agendamento manual da
+          profissional).
+      VALIDADO: fluxo completo testado no navegador de ponta a ponta
+      (login -> escolher profissional -> escolher servico -> escolher
+      horario -> confirmar) terminando em "Agendamento realizado com
+      sucesso!" e o agendamento aparecendo corretamente em "Seu proximo
+      atendimento". dotnet build/test (49/49) limpos depois da mudanca.
+
+10.2. [P1, RESOLVIDO] Rate limit de criacao de salao bloqueava por 24h
+      apos so 3 tentativas, com mensagem enganosa
+      Program.cs: a policy "onboarding" permitia so 3 requisicoes por IP
+      a cada 24 HORAS (contra 5/minuto do login e 3/hora do cadastro de
+      cliente comum). Uma dona de salao real que errasse a senha de
+      confirmacao duas vezes ao criar a conta (erro comum) ficava travada
+      por um dia inteiro. Reproduzido ao vivo nesta sessao (o proprio
+      teste de onboarding bateu o limite).
+      CORRECAO APLICADA: PermitLimit da policy "onboarding" mudado de 3
+      por dia pra 5 por hora — ainda limita abuso automatizado de forma
+      significativa (no maximo 5 saloes criados por IP por hora) sem
+      travar uma dona de salao real por erro de digitacao.
+
+10.3. [P1, RESOLVIDO] Pagina de erro 429 sem nenhum estilo do MarcAi, e
+      Retry-After sempre fixo em 60s (errado pras policies de horas/dias)
+      A resposta de rate limit era um Response.WriteAsync de texto puro
+      — fundo preto do navegador, fonte monoespacada, zero identidade
+      visual — e o header Retry-After sempre dizia "60", mesmo quando a
+      janela real era de 1h ou 24h.
+      CORRECAO APLICADA: novo Services/RateLimitResponses.cs gera uma
+      pagina HTML com a mesma paleta/tipografia do _Layout.cshtml
+      (cartao branco, marca "MarcAi", sem dependencia de CDN — nao pode
+      falhar se o CDN do Bootstrap estiver fora do ar). O
+      Retry-After agora e calculado a partir de
+      context.Lease.TryGetMetadata(MetadataName.RetryAfter, ...), o valor
+      real da policy que rejeitou, e a mensagem mostra uma duracao
+      amigavel em portugues ("em cerca de 1 hora", "amanha", etc.) em vez
+      de sempre dizer "instantes".
+
+10.4. [P2, RESOLVIDO] Logout exigia dois cliques, com texto que prometia
+      um so
+      O link "Sair" da navbar era um <a> simples (GET) para /Auth/Logout,
+      mas o handler de logout so existe como OnPostAsync — GET so
+      mostrava uma tela intermediaria com um botao "Sair agora", cujo
+      texto dizia "Voce sera redirecionada em instantes" mas nada
+      acontecia ate o segundo clique.
+      CORRECAO APLICADA: _Navbar.cshtml — os dois links "Sair" (usuario
+      comum e superadmin) viraram um <form method="post"
+      asp-page="/Auth/Logout"> com um <button type="submit"> estilizado
+      como link, deslogando em um unico clique de verdade (mantendo
+      logout como POST, que e a pratica correta contra logout forjado via
+      GET). A pagina de fallback (Logout.cshtml, ainda alcancavel por
+      navegacao direta) teve o texto corrigido pra nao prometer
+      redirecionamento automatico que nao acontece.
+
+10.5. [RESOLVIDO — CONFIRMADO POR TESTE COMPORTAMENTAL] Migration 0006 JA
+      ESTA APLICADA no Supabase — secao 3.7/9.6 estavam desatualizadas
+      A secao 3.7/9.6 registrava a migration
+      0006_cancellation_trigger_and_overlap_constraint.sql como PENDENTE.
+      Como Claude so tem acesso REST ao Supabase (sem SQL direto — ver
+      secao 7.7), a confirmacao foi feita testando o COMPORTAMENTO real
+      via REST em vez de inspecionar o schema diretamente:
+        - Criado um agendamento de teste comecando em +30min (dentro da
+          janela de 1h) e uma tentativa de PATCH pra status=cancelled
+          retornou erro 400 com "CANCELLATION_TOO_LATE: cancellations
+          require at least 1 hour notice before start_time" (SQLSTATE
+          P0001) — a trigger_check_cancellation esta ativa.
+        - Criado um segundo agendamento sobreposto (mesma
+          tenant_id+employee_id, horario cruzando o primeiro) e o INSERT
+          retornou erro 400 com "conflicting key value violates exclusion
+          constraint appointments_no_overlap" — a EXCLUDE constraint
+          esta ativa.
+      Os dois dados de teste foram apagados via DELETE (REST) logo em
+      seguida. CONCLUSAO: a migration 0006 ja foi aplicada de verdade no
+      banco de producao/dev do Supabase — a secao 3.7/9.6 estava
+      desatualizada, nao o banco. Corrigido nesta rodada (ver secao 6 e
+      3.7).
+
+10.6. [POSITIVO — confirmado funcionando] Validacao de senha, mensagens
+      de erro de login, e roteamento multi-tenant
+      Testado ao vivo: senha curta no cadastro e rejeitada com mensagem
+      clara (minimo 8 caracteres) sem vazar os campos de senha de volta
+      ao usuario. Login com credenciais erradas devolve "E-mail ou senha
+      invalidos" — mensagem generica correta (nao indica se foi o e-mail
+      ou a senha que errou, evitando enumeracao de contas). Roteamento
+      por subdominio (studio-bella.localhost) funcionando, com
+      marca/copy corretos por tenant.
+
+10.7. [RESOLVIDO] Verificacao real do Docker — build e run confirmados
+      `docker build -t marcai:latest .` completou sem erro (imagem
+      multi-estagio, SDK 10.0-preview -> aspnet 10.0-preview). `docker
+      run` com as env vars Supabase__Url/Supabase__SecretKey/
+      Tenancy__RootDomain subiu o container normalmente: `curl
+      localhost:8080/` respondeu 200, e um request com `Host:
+      studio-bella.localhost:8080` tambem respondeu 200 (roteamento
+      multi-tenant por subdominio funciona dentro do container). Container
+      de teste parado e removido depois da verificacao.
+      NOVO ACHADO (nao bloqueia, mas vale registrar pro deploy real):
+      o log do container mostra o aviso padrao do ASP.NET Core "Storing
+      keys in a directory that may not be persisted outside of the
+      container" — as chaves de DataProtection (usadas pelo cookie de
+      autenticacao) sao geradas em memoria/disco efemero do container. Em
+      producao (EC2, secao 9.3), se o container reiniciar ou houver mais
+      de uma instancia, todas as sessoes logadas caem e cookies antigos
+      viram invalidos sem aviso — ACAO RECOMENDADA antes de ir pra
+      producao: configurar
+      `.PersistKeysToFileSystem(caminho-em-volume-persistente)` ou
+      equivalente (S3, Redis) na configuracao de DataProtection em
+      Program.cs.
+
+------------------------------------------------------------------------
+11. FECHAMENTO DA RODADA DE CORRECOES DE QA (2026-07-19, mesma sessao)
+------------------------------------------------------------------------
+Todos os 7 itens da secao 10 foram corrigidos (ou verificados/resolvidos,
+no caso do 10.5/10.6/10.7) na mesma sessao em que foram encontrados,
+pedido explicito do usuario ("atue como Software Developer Fullstack...
+realize as correcoes necessarias"). Build (dotnet build) e suite de
+testes (dotnet test, 49/49) limpos depois de cada mudanca relevante.
+
+Arquivos alterados nesta rodada:
+  - Pages/Cliente/DashCliente.cshtml (roteamento proId/srvId, bloco de
+    mensagens fora do step "home")
+  - Pages/Cliente/DashCliente.cshtml.cs (idem + SelectedDateTime
+    truncado pro minuto + Appointment.Id gerado antes do Insert)
+  - Pages/Profissional/DashProfissional.cshtml.cs (Appointment.Id gerado
+    antes do Insert no agendamento manual)
+  - Program.cs (policy "onboarding" 3/dia -> 5/hora; OnRejected agora usa
+    Retry-After real da policy + HTML com a marca do MarcAi)
+  - Services/RateLimitResponses.cs (novo — HTML da pagina 429)
+  - Pages/Shared/_Navbar.cshtml (logout em um clique via form POST)
+  - Pages/Auth/Logout.cshtml (copy corrigida da tela de fallback)
+
+Dado de teste criado e ja removido/mantido nesta rodada, pra registro:
+  - Um servico ativo ("Design de Sobrancelhas (QA)", R$ 80, 30min) foi
+    criado via REST pro tenant studio-bella pra permitir testar o
+    wizard de agendamento de ponta a ponta (o tenant nao tinha NENHUM
+    servico cadastrado — zero linhas na tabela services antes disso).
+    Mantido no banco (nao removido) pra nao deixar o ambiente de teste
+    sem nenhum servico de novo; renomeie ou apague pelo Painel Admin se
+    nao fizer sentido manter.
+  - Uma conta de cliente de teste (cliente.qa@exemplo.com, tenant
+    studio-bella) tambem ficou no banco, criada numa sessao anterior de
+    QA — mesma logica, sem problema em manter.
+  - Os agendamentos de teste (cancelamento tardio, overlap, e o
+    agendamento real criado validando o fix do 10.1) foram todos
+    apagados via DELETE depois de cada verificacao.
+
+O que NAO foi coberto nesta rodada (fora do escopo dos achados da secao
+10, continuam como estavam):
+  - Testes automatizados novos pros bugs corrigidos — os 49 testes
+    existentes nao cobrem Razor Pages/Supabase real (mesma limitacao ja
+    registrada na secao 4.5); nenhum teste de regressao foi escrito pro
+    fluxo de agendamento nesta rodada.
+  - O aviso de DataProtection key persistence (achado novo do 10.7) —
+    registrado, mas nao corrigido, por ser uma decisao de infraestrutura
+    de deploy (qual storage persistente usar), nao um bug de codigo.
+  - Todos os itens das secoes 4/5/9 que nao vieram da secao 10 (billing/
+    Asaas, provedor de e-mail/Resend, deploy real em EC2, branding por
+    tenant) continuam exatamente como estavam — nao fizeram parte do
+    pedido desta rodada.

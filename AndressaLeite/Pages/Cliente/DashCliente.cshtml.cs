@@ -43,9 +43,20 @@ namespace AndressaLeite.Pages.Cliente
 
         [BindProperty(SupportsGet = true)] public string? SelectedProId { get; set; }
         [BindProperty(SupportsGet = true)] public string? SelectedSrvId { get; set; }
-        [BindProperty] public DateTime SelectedDateTime { get; set; } = DateTime.Now.AddDays(1);
+        // Truncado pro minuto: o input <datetime-local asp-for="SelectedDateTime">
+        // renderiza esse valor inicial no atributo "value", e o HTML5 usa esse
+        // mesmo atributo como base do step de validação quando não há "min"
+        // explícito. Com segundos/milissegundos de DateTime.Now sobrando aqui
+        // (ex.: ...:39.116), o navegador só aceitava horários que caíssem
+        // exatamente nesse instante repetido a cada minuto — o que nenhum
+        // datetime-picker nativo (granularidade de minuto) consegue produzir,
+        // bloqueando o envio do formulário silenciosamente (achado de QA).
+        [BindProperty] public DateTime SelectedDateTime { get; set; } = TruncateToMinute(DateTime.Now.AddDays(1));
         [BindProperty] public string? BookForName { get; set; }
         [BindProperty] public string? BookForPhone { get; set; }
+
+        private static DateTime TruncateToMinute(DateTime value) =>
+            new(value.Year, value.Month, value.Day, value.Hour, value.Minute, 0, value.Kind);
 
         public async Task<IActionResult> OnGetAsync([FromQuery] string step = "home")
         {
@@ -257,7 +268,7 @@ namespace AndressaLeite.Pages.Cliente
             if (string.IsNullOrWhiteSpace(SelectedSrvId))
             {
                 ErrorMessage = "Serviço inválido.";
-                return RedirectToPage("/Cliente/DashCliente", new { step = "service", proId = SelectedProId });
+                return RedirectToPage("/Cliente/DashCliente", new { step = "service", SelectedProId });
             }
             var srvCheck = await _supabase.From<Service>()
                 .Where(x => x.Id == SelectedSrvId)
@@ -266,7 +277,7 @@ namespace AndressaLeite.Pages.Cliente
             if (srvCheck is null || !srvCheck.IsActive)
             {
                 ErrorMessage = "Serviço inválido ou inativo.";
-                return RedirectToPage("/Cliente/DashCliente", new { step = "service", proId = SelectedProId });
+                return RedirectToPage("/Cliente/DashCliente", new { step = "service", SelectedProId });
             }
 
             // Preço/duração EFETIVOS da profissional (override em
@@ -291,6 +302,13 @@ namespace AndressaLeite.Pages.Cliente
             {
                 var newAppointment = new Appointment
                 {
+                    // Sem isso, o Id fica string.Empty (default do modelo) e o
+                    // Postgrest.Insert manda "id": "" no payload — o Postgres
+                    // rejeita ("invalid input syntax for type uuid") em vez de
+                    // usar o default uuid_generate_v4() da coluna. Mesma causa
+                    // raiz do bug em DashProfissional.cshtml.cs (achado de QA);
+                    // Tenant/Profile já geravam o Id assim (CriarSalao.cshtml.cs).
+                    Id = Guid.NewGuid().ToString(),
                     ClientId = userIdStr,
                     EmployeeId = SelectedProId!,
                     ServiceId = SelectedSrvId!,

@@ -71,10 +71,20 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-    options.OnRejected = async (context, _) =>
+    options.OnRejected = async (context, cancellationToken) =>
     {
-        context.HttpContext.Response.Headers["Retry-After"] = "60";
-        await context.HttpContext.Response.WriteAsync("Muitas tentativas. Tente novamente em instantes.");
+        // Duração real da janela da política que rejeitou, não um valor fixo
+        // — antes o header e a mensagem sempre diziam "60s"/"instantes"
+        // mesmo quando a janela era de horas ou dias (política "onboarding"),
+        // o que enganava quem via a mensagem (readme.txt secao 10.2/10.3).
+        var retryAfter = TimeSpan.FromMinutes(1);
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var lease))
+        {
+            retryAfter = lease;
+        }
+        context.HttpContext.Response.Headers["Retry-After"] = ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString();
+        context.HttpContext.Response.ContentType = "text/html; charset=utf-8";
+        await context.HttpContext.Response.WriteAsync(RateLimitResponses.BuildHtml(retryAfter), cancellationToken);
     };
 
     // Política "login" — 5 tentativas por minuto por IP.
@@ -105,14 +115,19 @@ builder.Services.AddRateLimiter(options =>
 
     // Política "onboarding" — criar um salão novo é mais "caro" de abusar
     // que um cadastro de cliente comum (spam de tenants, land-grab de
-    // slugs bons), então bem mais restrita: 3 por dia por IP.
+    // slugs bons), então mais restrita que login/signup. Era 3 por DIA
+    // (24h de bloqueio pra quem errasse a senha de confirmação duas vezes
+    // — achado 10.2 do readme.txt); trocado para 5 por hora, que ainda
+    // limita abuso automatizado de forma significativa (no máximo 5 saloes
+    // criados por IP por hora) sem travar uma dona de salão real que
+    // simplesmente errou o formulário.
     options.AddPolicy("onboarding", httpContext =>
     {
         var ip = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
         {
-            PermitLimit = 3,
-            Window = TimeSpan.FromDays(1),
+            PermitLimit = 5,
+            Window = TimeSpan.FromHours(1),
             QueueLimit = 0,
             AutoReplenishment = true
         });
